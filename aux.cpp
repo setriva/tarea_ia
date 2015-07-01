@@ -1,6 +1,4 @@
-#include <string>
-#include <algorithm>
-#include <iostream>
+#include "aux.h"
 
 /*For example, to read the name of a file 
 after a -f command line argument. You can

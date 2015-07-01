@@ -1,5 +1,4 @@
 #pragma once
-#include <list>
 
 class proceso
 {
@@ -13,13 +12,3 @@ private:
     int* costes;
 };
 
-class maquina
-{
-public:
-    maquina();
-    
-private:
-    std::list<proceso> procesos;
-    
-
-};

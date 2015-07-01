@@ -1,5 +1,6 @@
-#include "clases.h"
+#include "proceso.h"
 
+//Funciones de la clase proceso
 proceso::proceso()
 {
     
@@ -18,8 +19,3 @@ void proceso::setCostes(int* cost)
 
 }
 
-maquina::maquina()
-{
-    
-
-}
