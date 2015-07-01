@@ -34,3 +34,8 @@ int servicio::getSpreadmin()
 {
     return spreadmin;
 }
+
+void servicio::pushProceso(int idProceso)
+{
+    idProcesos.push_back(idProceso);
+}

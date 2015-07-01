@@ -2,6 +2,8 @@
 #include <list>
 #include "proceso.h"
 
+using namespace std;
+
 class maquina
 {
 public:
@@ -19,7 +21,7 @@ public:
     int getLocation();
     
 private:
-    std::list<proceso> procesos;
+    list<proceso> procesos;
     int location, neighborhood;
     int* capacidad_max;
     int* capacidad_safe;

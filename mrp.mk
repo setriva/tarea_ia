@@ -60,7 +60,7 @@ AS       := /usr/bin/as
 ## User defined environment variables
 ##
 CodeLiteDir:=/usr/share/codelite
-Objects0=$(IntermediateDirectory)/main.cpp$(ObjectSuffix) $(IntermediateDirectory)/aux.cpp$(ObjectSuffix) $(IntermediateDirectory)/servicio.cpp$(ObjectSuffix) $(IntermediateDirectory)/maquina.cpp$(ObjectSuffix) $(IntermediateDirectory)/proceso.cpp$(ObjectSuffix) 
+Objects0=$(IntermediateDirectory)/main.cpp$(ObjectSuffix) $(IntermediateDirectory)/aux.cpp$(ObjectSuffix) $(IntermediateDirectory)/servicio.cpp$(ObjectSuffix) $(IntermediateDirectory)/maquina.cpp$(ObjectSuffix) $(IntermediateDirectory)/proceso.cpp$(ObjectSuffix) $(IntermediateDirectory)/solucion.cpp$(ObjectSuffix) 
 
 
 
@@ -126,6 +126,14 @@ $(IntermediateDirectory)/proceso.cpp$(DependSuffix): proceso.cpp
 
 $(IntermediateDirectory)/proceso.cpp$(PreprocessSuffix): proceso.cpp
 	@$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) $(PreprocessOnlySwitch) $(OutputSwitch) $(IntermediateDirectory)/proceso.cpp$(PreprocessSuffix) "proceso.cpp"
+
+$(IntermediateDirectory)/solucion.cpp$(ObjectSuffix): solucion.cpp $(IntermediateDirectory)/solucion.cpp$(DependSuffix)
+	$(CXX) $(IncludePCH) $(SourceSwitch) "/home/nanairo/tarea_ia/solucion.cpp" $(CXXFLAGS) $(ObjectSwitch)$(IntermediateDirectory)/solucion.cpp$(ObjectSuffix) $(IncludePath)
+$(IntermediateDirectory)/solucion.cpp$(DependSuffix): solucion.cpp
+	@$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) -MG -MP -MT$(IntermediateDirectory)/solucion.cpp$(ObjectSuffix) -MF$(IntermediateDirectory)/solucion.cpp$(DependSuffix) -MM "solucion.cpp"
+
+$(IntermediateDirectory)/solucion.cpp$(PreprocessSuffix): solucion.cpp
+	@$(CXX) $(CXXFLAGS) $(IncludePCH) $(IncludePath) $(PreprocessOnlySwitch) $(OutputSwitch) $(IntermediateDirectory)/solucion.cpp$(PreprocessSuffix) "solucion.cpp"
 
 
 -include $(IntermediateDirectory)/*$(DependSuffix)
