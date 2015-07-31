@@ -15,6 +15,11 @@ void servicio::initDependencias(int dependencias_num)
     dependencias = new int[dependencias_num];
 }
 
+void servicio::setId(int valor)
+{
+    id = valor;
+}
+
 void servicio::setDependencia(int id, int valor)
 {
     dependencias[id] = valor;

@@ -9,6 +9,7 @@ public:
     servicio();
     ~servicio();
     //setters
+    void setId(int id);
     void setSpreadmin(int nspreadmin);
     void initDependencias(int dependencias_num);
     void setDependencia(int id, int valor);
@@ -20,10 +21,9 @@ public:
     void pushProceso(int newProceso);
     
 private:
+    int id;
     int spreadmin;
     int* dependencias;
     //esto guarda el ID de los procesos
     vector<int> idProcesos;
-    
-    //proceso* listaProcesos; //maybe i'll need this later
 };
