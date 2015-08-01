@@ -28,6 +28,7 @@ public:
     void setCosteMovimiento(int id, int valor);
 
     //getters
+    int getId();
     int getNeighborhood();
     int getLocation();
 
@@ -35,7 +36,7 @@ public:
 
     //funciones para el greedy
     void calcular_capacidad();
-    bool operator<(maquina const& lhs, maquina const& rhs);
+    bool operator<(const maquina& maq) const;
     //ojo: la máquina lleva un costo nomás, se obtienen los costos del proceso y se agregan al total
     bool agregar_proceso(proceso proc);
     bool quitar_proceso(proceso proc);
@@ -49,7 +50,6 @@ private:
     int* costos_movimiento;
 
     //esto para calcular el greedy
-    bool recalcular_capacidad;
     int* capacidad_utilizada;
     float capacidad_disponible;   //porcentaje, esto va entre 0 y 1
 };

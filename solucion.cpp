@@ -1,4 +1,5 @@
 #include "solucion.h"
+#include <list>
 
 solucion::solucion()
 {
@@ -213,7 +214,58 @@ int solucion::llenarSolucion(char* entrada)
     return 0;
 }
 
+int solucion::llenarSolucion()
+{
+    //copiar máquinas
+    list<maquina> maquinas_sort;
+    for (int m = 0; m < maquinas_num; ++m)
+    {
+        maquinas_sort.push_back(maquinas[m]);
+    }
+    list<maquina>::iterator maq_i;
 
+    //llenar matriz de espacio disponible en las máquinas
+    for(int m = 0; m < maquinas_num; ++m)
+        for(int r = 0; r < recursos_num; ++r)
+            espacio_disponible[m][r] = maquinas[m].getEspacioMax(r);
+
+    //en este punto las máquinas están vacías, hay que empezar a llenarlas
+    //la lista se ordena después de cada inserción
+    //agregar a la primera máquina que se pueda
+
+    bool insert_ok;
+    int m_id;
+    int srv;
+
+    //loop principal
+    for(int p = 0; p < procesos_num; ++p)
+    {
+        for(maq_i = maquinas_sort.begin(); maq_i != maquinas_sort.end(); ++maq_i)
+        {
+            m_id = maq_i->getId();
+            //Revisión de restricciones:
+            insert_ok = true;
+            //Capacidad (no cuenta el uso transitorio)
+            for(int r = 0; r < recursos_num; ++r)
+            {
+                //para cada recurso, ver si hay suficiente espacio en la máquina
+                if(espacio_disponible[m_id][r] < procesos[p].getUsoRecursos(r)) insert_ok = false;
+            }
+
+            //Conflicto de servicios
+            srv = procesos[p].getServicio();
+            if (servicio_maquina[srv][m_id]) insert_ok = false;
+
+            //Conflicto de localizaciones (según spreadmin)
+
+
+            //Conflicto de vecindarios (según dependencia)
+        }
+
+    }
+
+
+}
 
 
 
