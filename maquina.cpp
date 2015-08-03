@@ -54,6 +54,13 @@ void maquina::setCosteMovimiento(int id, int valor)
     costos_movimiento[id] = valor;
 }
 
+void maquina::setCapacidadUtilizada(int id, int valor)
+{
+    capacidad_utilizada[id] = valor;
+    //requiere recalcular la capacidad disponible
+    calcular_capacidad();
+}
+
 int maquina::getId()
 {
     return id;

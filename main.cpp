@@ -274,7 +274,7 @@ int main(int argc, char **argv)
     //inicializar estructuras de la solución
     sol_inicial.setCantidades(procesos_num, maquinas_num, servicios_num, localizaciones_num, vecindarios_num);
     //pasar modelo
-    sol_inicial.setObjetos(procesos, maquinas);
+    sol_inicial.setObjetos(procesos, maquinas, servicios);
 
     //leer archivo
     if (sol_inicial.llenarSolucion(fileSolInicial) != 0)

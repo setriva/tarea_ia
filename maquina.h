@@ -25,6 +25,7 @@ public:
     void setNeighborhood(int nNeighborhood);
     void setCapacidadMax(int id, int valor);
     void setCapacidadSafe(int id, int valor);
+    void setCapacidadUtilizada(int id, int valor);
     void setCosteMovimiento(int id, int valor);
 
     //getters

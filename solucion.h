@@ -6,6 +6,7 @@
 
 #include "proceso.h"
 #include "maquina.h"
+#include "servicio.h"
 
 using namespace std;
 
@@ -41,7 +42,7 @@ public:
 
     void setCantidades(int procs, int maqs, int srvcs, int locs, int vecs);
 
-    void setObjetos(proceso* procs, maquina* maqs);
+    void setObjetos(proceso* procs, maquina* maqs, servicio* srvs);
 
     //getters
     int getCostoSolucion();
@@ -78,6 +79,8 @@ private:
     //Objetos lógicos
     proceso* procesos;
     maquina* maquinas;
+    servicio* servicios;
+
 
 //Parámetros de la solución
     //Estructuras de datos

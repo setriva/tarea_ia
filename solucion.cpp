@@ -1,5 +1,6 @@
 #include "solucion.h"
 #include <list>
+#include <iterator>
 
 solucion::solucion()
 {
@@ -18,7 +19,8 @@ solucion::~solucion()
 
 //constructor de copia de solución
 //sol es la solución inicial
-//no es necesaria para la solución del greedy
+//mantener_inicial es por si acaso no necesitara mantener
+//la solución inicial para calcular algo
 solucion::solucion(const solucion& sol, bool mantener_inicial)
 {
     //Referencia a la solución inicial
@@ -42,7 +44,7 @@ solucion::solucion(const solucion& sol, bool mantener_inicial)
     setCantidades(sol.procesos_num, sol.maquinas_num, sol.servicios_num, sol.localizaciones_num, sol.vecindarios_num);
 
     //objetos
-    setObjetos(sol.procesos, sol.maquinas);
+    setObjetos(sol.procesos, sol.maquinas, sol.servicios);
 }
 
 //esta es la parte que se pone interesante
@@ -160,10 +162,11 @@ void solucion::setCantidades(int procs, int maqs, int srvcs, int locs, int vecs)
 
 }
 
-void solucion::setObjetos(proceso* procs, maquina* maqs)
+void solucion::setObjetos(proceso* procs, maquina* maqs, servicio* svcs)
 {
     procesos = procs;
     maquinas = maqs;
+    servicios = svcs;
 }
 
 int solucion::llenarSolucion(char* entrada)
@@ -226,23 +229,59 @@ int solucion::llenarSolucion()
 
     //llenar matriz de espacio disponible en las máquinas
     for(int m = 0; m < maquinas_num; ++m)
+    {
         for(int r = 0; r < recursos_num; ++r)
+        {
             espacio_disponible[m][r] = maquinas[m].getEspacioMax(r);
+            //manejo de recursos transitivos
+            if (recursos_trans[r])
+            {
+                //si el recurso es transitivo, está ocupado por el movimiento anterior
+                //basta con igualarlo en esta parte
+                espacio_disponible[m][r] = sol_inicial.espacio_disponible[m][r];
+
+                //hasta ahora, maquinas_sort está ordenado por id
+                //así que se puede acceder directamente (en teoría)
+                maq_i->setCapacidadUtilizada(r, (maquinas[m].getEspacioMax(r) - espacio_disponible[m][r]));
+            }
+        }
+        //avanzar el iterador
+        advance(maq_i, 1);
+    }
+
+    //ahora se ordena la lista
+    //de ahora en adelante no se asegura que los id de las máquinas sean correlativos
+    maquinas_sort.sort();
+
+    //lista de procesos que no han podido agregarse aún
+    list<proceso> procesos_cola;
+    list<proceso>::iterator proc_i;
 
     //en este punto las máquinas están vacías, hay que empezar a llenarlas
-    //la lista se ordena después de cada inserción
+
+    //la lista se ordena después de cada inserción (al final del loop principal)
     //agregar a la primera máquina que se pueda
 
-    bool insert_ok;
-    int m_id;
-    int srv;
+    bool insert_ok;         //flag de inserción posible
+    int m_id;               //id de la máquina
+    int srv, dep, srv_dep;  //parámetros del proceso
+    int loc, vec;           //parámetros de la máquina
 
     //loop principal
     for(int p = 0; p < procesos_num; ++p)
     {
+        //servicio del proceso
+        srv = procesos[p].getServicio();
+        //dependencias del proceso
+        dep = servicios[srv].getDependenciaNum();
+        //revisar las máquinas ordenadas
         for(maq_i = maquinas_sort.begin(); maq_i != maquinas_sort.end(); ++maq_i)
         {
+            //obtener id de la máquina, localización, vecindario
             m_id = maq_i->getId();
+            loc = maquinas[m_id].getLocation();
+            vec = maquinas[m_id].getNeighborhood();
+
             //Revisión de restricciones:
             insert_ok = true;
             //Capacidad (no cuenta el uso transitorio)
@@ -253,18 +292,179 @@ int solucion::llenarSolucion()
             }
 
             //Conflicto de servicios
-            srv = procesos[p].getServicio();
             if (servicio_maquina[srv][m_id]) insert_ok = false;
 
             //Conflicto de localizaciones (según spreadmin)
-
+            if(spread_servicios[srv] < servicios[srv].getSpreadmin())
+            {
+                //servicio no cumple con spreadmin
+                //si ya hay un proceso en la localización, buscar otra máquina
+                if (servicio_localizacion[srv][loc] > 0) insert_ok = false;
+            }//else, servicio cumple con spreadmin, carry on
 
             //Conflicto de vecindarios (según dependencia)
-        }
+            if (dep > 0)
+            {
+                //Servicio tiene dependencias, revisarlas
+                for (int d = 0; d < dep; ++d)
+                {
+                    srv_dep = servicios[srv].getDependencia(d);
+                    //si una de las dependencias no se cumple en la máquina, descartar la máquina
+                    if (servicio_vecindario[srv_dep][vec] == 0) insert_ok = false;
+                }
+            }//else, servicio no tiene dependencias, carry on
 
+            //Fin de las comprobaciones
+            if (insert_ok)
+            {
+                //nada impide la inserción, a insertar entonces
+                asignacion_procesos[p] = m_id;
+
+                //restar al espacio disponible, en estructura
+                for (int r = 0; r < recursos_num; ++r)
+                    espacio_disponible[m_id][r] -= procesos[p].getUsoRecursos(r);
+                //y en máquina
+                maq_i->agregar_proceso(procesos[p]);
+
+                //set bit de servicio máquina
+                servicio_maquina[srv][m_id] = true;
+
+                //sumar loc, vec, spread
+                servicio_localizacion[srv][loc] += 1;
+                servicio_vecindario[srv][vec] += 1;
+                spread_servicios[srv] += 1;
+
+                //lista la agregación, pasar al siguiente proceso
+                break;
+            }
+            //si no hay insert_ok, entonces probar con la siguiente máquina
+            //continue;
+        }//endfor(maquinas)
+
+        //se revisaron todas las máquinas
+        if (!insert_ok) //después de ver todas las máquinas no metí el proceso en ningún lado
+        {
+            procesos_cola.push_back(procesos[p]);
+        }
+        //seguir con el siguiente proceso; ordenar la lista de máquinas
+        maquinas_sort.sort();
+        //continue;
+    }//endfor(procesos)
+
+    //revisar cola de procesos no agregados
+    int p;
+    size_t size_cola = procesos_cola.size();
+    while (!procesos_cola.empty())
+    {
+        for(proc_i = procesos_cola.begin(); proc_i != procesos_cola.end(); ++proc_i)
+        {
+            //obtener id del proceso
+            p = proc_i->getId();
+            //servicio del proceso (boilerplate, sorry)
+            srv = procesos[p].getServicio();
+            //dependencias del proceso
+            dep = servicios[srv].getDependenciaNum();
+            //revisar las máquinas ordenadas
+            for(maq_i = maquinas_sort.begin(); maq_i != maquinas_sort.end(); ++maq_i)
+            {
+                //obtener id de la máquina, localización, vecindario
+                m_id = maq_i->getId();
+                loc = maquinas[m_id].getLocation();
+                vec = maquinas[m_id].getNeighborhood();
+
+                //Revisión de restricciones:
+                insert_ok = true;
+                //Capacidad (no cuenta el uso transitorio)
+                for(int r = 0; r < recursos_num; ++r)
+                {
+                    //para cada recurso, ver si hay suficiente espacio en la máquina
+                    if(espacio_disponible[m_id][r] < procesos[p].getUsoRecursos(r)) insert_ok = false;
+                }
+
+                //Conflicto de servicios
+                if (servicio_maquina[srv][m_id]) insert_ok = false;
+
+                //Conflicto de localizaciones (según spreadmin)
+                if(spread_servicios[srv] < servicios[srv].getSpreadmin())
+                {
+                    //servicio no cumple con spreadmin
+                    //si ya hay un proceso en la localización, buscar otra máquina
+                    if (servicio_localizacion[srv][loc] > 0) insert_ok = false;
+                }//else, servicio cumple con spreadmin, carry on
+
+                //Conflicto de vecindarios (según dependencia)
+                if (dep > 0)
+                {
+                    //Servicio tiene dependencias, revisarlas
+                    for (int d = 0; d < dep; ++d)
+                    {
+                        srv_dep = servicios[srv].getDependencia(d);
+                        //si una de las dependencias no se cumple en la máquina, descartar la máquina
+                        if (servicio_vecindario[srv_dep][vec] == 0) insert_ok = false;
+                    }
+                }//else, servicio no tiene dependencias, carry on
+
+                //Fin de las comprobaciones
+                if (insert_ok)
+                {
+                    //nada impide la inserción, a insertar entonces
+                    asignacion_procesos[p] = m_id;
+
+                    //restar al espacio disponible, en estructura
+                    for (int r = 0; r < recursos_num; ++r)
+                        espacio_disponible[m_id][r] -= procesos[p].getUsoRecursos(r);
+                    //y en máquina
+                    maq_i->agregar_proceso(procesos[p]);
+
+                    //set bit de servicio máquina
+                    servicio_maquina[srv][m_id] = true;
+
+                    //sumar loc, vec, spread
+                    servicio_localizacion[srv][loc] += 1;
+                    servicio_vecindario[srv][vec] += 1;
+                    spread_servicios[srv] += 1;
+
+                    //lista la agregación: eliminar de la cola y pasar al siguiente
+                    procesos_cola.erase(proc_i);
+                    break;
+                }
+                //si no hay insert_ok, entonces probar con la siguiente máquina
+                //continue;
+            }//endfor(maquinas)
+            //si no se agregó el proceso, seguirá en la cola nomás, por ahora
+        }//endfor(procesos)
+        //para asegurarse que esto sirve para algo, hay que ver si disminuye
+        //la cantidad de procesos en la cola
+        if (size_cola == procesos_cola.size())
+        {
+            //esto es inútil
+            break;
+        }
+        else
+        {
+            //intentamos nuevamente
+            size_cola = procesos_cola.size();
+        }
+        //a estas alturas debiera no importar mucho el orden de las máquinas
+        //si hay demoras en este paso, comentar el comando
+        maquinas_sort.sort();
+    }//endwhile(cola vacía)
+
+    //fin del greedy
+    if (!procesos_cola.empty()) insert_ok = false;
+    else
+    {
+        insert_ok = true;
+        //necesito asegurarme que asigné todo, más vale prevenir(?)
+        for (int p = 0; p < procesos_num; ++p)
+        {
+            if (asignacion_procesos[p] == -1) insert_ok = false;
+            break;
+        }
     }
 
-
+    //true si está todo hecho, false si no se pudo agregar algo
+    return insert_ok;
 }
 
 

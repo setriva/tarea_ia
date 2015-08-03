@@ -16,14 +16,16 @@ public:
     //getters
     int getSpreadmin();
     int getDependencia(int id);
-    
+    int getDependenciaNum();
+
     //manipulación de procesos
     void pushProceso(int newProceso);
-    
+
 private:
     int id;
     int spreadmin;
     int* dependencias;
+    int dependencias_num;
     //esto guarda el ID de los procesos
     vector<int> idProcesos;
 };

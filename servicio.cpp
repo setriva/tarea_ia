@@ -3,6 +3,7 @@
 servicio::servicio()
 {
     //do nothing
+    dependencias_num = 0;
 }
 
 servicio::~servicio()
@@ -10,9 +11,10 @@ servicio::~servicio()
     delete[] dependencias;
 }
 
-void servicio::initDependencias(int dependencias_num)
+void servicio::initDependencias(int dnum)
 {
-    dependencias = new int[dependencias_num];
+    dependencias_num = dnum;
+    dependencias = new int[dnum];
 }
 
 void servicio::setId(int valor)
@@ -33,6 +35,11 @@ void servicio::setSpreadmin(int nspreadmin)
 int servicio::getDependencia(int id)
 {
     return dependencias[id];
+}
+
+int servicio::getDependenciaNum()
+{
+    return dependencias_num;
 }
 
 int servicio::getSpreadmin()
