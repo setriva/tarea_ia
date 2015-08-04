@@ -48,8 +48,8 @@ public:
     int getCostoSolucion();
 
     //fillers
-    int llenarSolucion();              //aplicar greedy
-    int llenarSolucion(char* entrada);  //leer archivo entrada
+    bool llenarSolucion();              //aplicar greedy
+    int llenarSolucion(ifstream& fsol);  //leer archivo entrada
 
 private:
 //Parámetros del modelo
@@ -81,6 +81,7 @@ private:
     maquina* maquinas;
     servicio* servicios;
 
+    //ifstream fsol;
 
 //Parámetros de la solución
     //Estructuras de datos

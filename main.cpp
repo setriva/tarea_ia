@@ -51,26 +51,45 @@ int main(int argc, char **argv)
     string line;
     int auxint;
 
-    //Obtener ruta de archivo instancia
-    char* fileInstancia = getCmdOption(argv, argv+argc, "-p");
-    if (!fileInstancia)
+    //Abrir instancia
+    char* fi = getCmdOption(argv, argv+argc, "-p");
+    string fileInstancia(fi);
+    if (fileInstancia.empty())
     {
         cout << "Falta el archivo de instancia.\n";
         return -1;
     }
-
-    cout << "La instancia es " << fileInstancia << endl;
-
-    //Cronometrando tiempo de lectura
-    auto inicio_lectura = chrono::high_resolution_clock::now();
-
     ifstream instancia(fileInstancia, ifstream::in);
-
     if (!instancia.good())
     {
         cout << "Instancia no existe!" << endl;
         return -1;
     }
+
+    //Abrir solución inicial
+    char* fsi = getCmdOption(argv, argv+argc, "-i");
+    string fileSolInicial(fsi);
+    if (fileSolInicial.empty())
+    {
+        cout << "Falta el archivo de solución inicial.\n";
+        return -1;
+    }
+    ifstream fsol(fileSolInicial, ifstream::in);
+    if (!fsol.good())
+    {
+        cout << "Solución inicial no existe!" << endl;
+        return -1;
+    }
+
+    cout << "La instancia es " << fileInstancia << endl;
+    cout << "Solución inicial es " << fileSolInicial << endl;
+
+    cout << endl;
+    cout << "Se iniciará lectura de instancia." << endl << "Pulse una tecla" << endl;
+    cin.get();
+
+    //Cronometrando tiempo de lectura de instancia
+    auto inicio_lectura = chrono::high_resolution_clock::now();
 
     //primera línea: cantidad de recursos
     instancia >> line;
@@ -148,10 +167,16 @@ int main(int argc, char **argv)
             instancia >> line;
             costoMovimientoMaquinas[i][j] = stoi(line);
         }
-        cout << '.';
+        //cout << '.';
     }
-    cout << endl;
+    //vistos los vecs y locs máximas, sumar uno para sacar la cantidad
+    vecindarios_num++; localizaciones_num++;
+    cout << "Se encontraron " << vecindarios_num << " vecindarios y ";
+    cout << localizaciones_num << " localizaciones." << endl;
+
+    //agregar cmm a solución inicial
     sol_inicial.setCMM(costoMovimientoMaquinas);
+
     //siguiente línea: cantidad de servicios
     instancia >> line;
     servicios_num = stoi(line);
@@ -184,9 +209,8 @@ int main(int argc, char **argv)
             }
             cout << "Servicio " << i << "tiene " << auxint << "dependencias" << endl;
         }
-        cout << '.';
+        //cout << '.';
     }
-    cout << endl;
     //leer procesos
     instancia >> line;
     procesos_num = stoi(line);
@@ -221,9 +245,8 @@ int main(int argc, char **argv)
         //coste de mover el proceso
         instancia >> line;
         procesos[i].setCosteMovimiento(stoi(line));
-        cout << '.';
+        //cout << '.';
     }
-    cout << endl;
 
     //balanceadores
     instancia >> line;
@@ -263,29 +286,53 @@ int main(int argc, char **argv)
     auto fin_lectura = chrono::high_resolution_clock::now();
     cout << "Tiempo de lectura de instancia: " << chrono::duration_cast<chrono::microseconds>(fin_lectura-inicio_lectura).count() << "us" << endl;
 
-    //Obtener ruta de archivo solución inicial
-    char* fileSolInicial = getCmdOption(argv, argv+argc, "-i");
-    if (!fileSolInicial)
-    {
-        cout << "Falta el archivo de solución inicial.\n";
-        return -1;
-    }
+    cout << "Se leerá solución inicial." << endl << "Pulse una tecla" << endl;
+    cin.get();
+
+    //Cronometrando tiempo de lectura de solución inicial
+    inicio_lectura = chrono::high_resolution_clock::now();
+
+    cout << "Intentando inicializar estructuras de solución inicial" << endl;
 
     //inicializar estructuras de la solución
     sol_inicial.setCantidades(procesos_num, maquinas_num, servicios_num, localizaciones_num, vecindarios_num);
+
+    cout << "Intentando pasar objetos" << endl;
+
     //pasar modelo
     sol_inicial.setObjetos(procesos, maquinas, servicios);
 
+    cout << "Intentando llenar solución" << endl;
+
     //leer archivo
-    if (sol_inicial.llenarSolucion(fileSolInicial) != 0)
+    if (sol_inicial.llenarSolucion(fsol) != 0)
     {
         cout << "Algo pasó" << endl;
         return -1;
     }
 
+    //Fin de lectura de solución inicial
+    fin_lectura = chrono::high_resolution_clock::now();
+    cout << "Tiempo de lectura de sol. inicial: " << chrono::duration_cast<chrono::microseconds>(fin_lectura-inicio_lectura).count() << "us" << endl;
 
+    cout << "Se generará solución greedy." << endl << "Pulse una tecla" << endl;
+    cin.get();
 
+    inicio_lectura = chrono::high_resolution_clock::now();
 
+    //preparar solución greedy
+    solucion sol_nueva(sol_inicial);
+
+    cout << "Iniciando algoritmo greedy." << endl;
+
+    bool greedy = sol_nueva.llenarSolucion();
+    if (!greedy)
+    {
+        cout << "Algoritmo greedy no funcionó, se descartará." << endl;
+    }
+
+    fin_lectura = chrono::high_resolution_clock::now();
+    cout << "Tiempo de generación de solución: " << chrono::duration_cast<chrono::microseconds>(fin_lectura-inicio_lectura).count() << "us" << endl;
 
 
 
@@ -293,5 +340,7 @@ int main(int argc, char **argv)
     delete[] recursos_trans;
     delete[] recursos_pesos;
     delete[] maquinas;
+    delete[] procesos;
+    delete[] servicios;
     return 0;
 }

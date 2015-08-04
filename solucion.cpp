@@ -23,8 +23,12 @@ solucion::~solucion()
 //la solución inicial para calcular algo
 solucion::solucion(const solucion& sol, bool mantener_inicial)
 {
+    cout << "En constructor de solución inicial" << endl;
     //Referencia a la solución inicial
     if (mantener_inicial) sol_inicial = &sol;
+
+    cout << "Copiando referencias" << endl;
+
     //costos
     costoMovimientoMaquinas = sol.costoMovimientoMaquinas;
     initBalanceTriple(sol.balances_num);
@@ -39,6 +43,8 @@ solucion::solucion(const solucion& sol, bool mantener_inicial)
     recursos_num = sol.recursos_num;
     peso_recursos = sol.peso_recursos;
     recursos_trans = sol.recursos_trans;
+
+    cout << "Inicializando cantidades y objetos" << endl;
 
     //cantidades
     setCantidades(sol.procesos_num, sol.maquinas_num, sol.servicios_num, sol.localizaciones_num, sol.vecindarios_num);
@@ -156,8 +162,11 @@ void solucion::setCantidades(int procs, int maqs, int srvcs, int locs, int vecs)
     for (int i = 0; i < servicios_num; ++i)
     {
         servicio_vecindario[i] = new int[vecindarios_num];
+
         for (int j = 0; j < vecindarios_num; ++j)   //init to 0
+        {
             servicio_vecindario[i][j] = 0;
+        }
     }
 
 }
@@ -169,22 +178,23 @@ void solucion::setObjetos(proceso* procs, maquina* maqs, servicio* svcs)
     servicios = svcs;
 }
 
-int solucion::llenarSolucion(char* entrada)
+int solucion::llenarSolucion(ifstream& fsol)
 {
     int maq, srv, loc, vec;
     string line;
-    ifstream fsol(entrada, ifstream::in);
 
-    if (!fsol.good())
-    {
-        cout << "Solución inicial no existe!" << endl;
-        return -1;
-    }
+    cout << "Rellenando espacio disponible en las máquinas" << endl;
 
     //obteniendo espacio de las máquinas
     for(int m = 0; m < maquinas_num; ++m)
+    {
         for (int r = 0; r < recursos_num; ++r)
+        {
             espacio_disponible[m][r] = maquinas[m].getEspacioMax(r);
+        }
+    }
+
+    cout << "Leyendo solución inicial" << endl;
 
     //leyendo la solución inicial
     for(int p = 0; p < procesos_num; ++p)
@@ -213,12 +223,61 @@ int solucion::llenarSolucion(char* entrada)
 
     }
 
+    //Revisión
+    cout << "Vector de procesos vs máqunas:" << endl;
+    for (int p = 0; p < procesos_num; ++p) cout << asignacion_procesos[p] << ' ';
+    cout << endl;
+    cout << "Espacio disponible por máquina:" << endl;
+    for (int m = 0; m < maquinas_num; ++m)
+    {
+        cout << "Maq " << m << ": ";
+        for (int r = 0; r < recursos_num; ++r)
+        {
+            cout << espacio_disponible[m][r] << " ";
+        }
+        cout << endl;
+    }
+    cout << "Matriz srv/maq:" << endl;
+    for (int s = 0; s < servicios_num; ++s)
+    {
+        for (int m = 0; m < maquinas_num; ++m)
+        {
+            cout << (int)servicio_maquina[s][m] << " ";
+        }
+        cout << endl;
+    }
+    cout << "Matriz srv/loc:" << endl;
+    for (int s = 0; s < servicios_num; ++s)
+    {
+        for (int l = 0; l < localizaciones_num; ++l)
+        {
+            cout << servicio_localizacion[s][l] << " ";
+        }
+        cout << endl;
+    }
+    cout << "Matriz srv/vec:" << endl;
+    for (int s = 0; s < servicios_num; ++s)
+    {
+        for (int v = 0; v < vecindarios_num; ++v)
+        {
+            cout << servicio_vecindario[s][v] << " ";
+        }
+        cout << endl;
+    }
+    cout << "Spread de los servicios:" << endl;
+    for (int s = 0; s < servicios_num; ++s)
+    {
+        cout << spread_servicios[s] << " ";
+    }
+    cout << endl << endl;
+
     //done
     return 0;
 }
 
-int solucion::llenarSolucion()
+bool solucion::llenarSolucion()
 {
+    cout << "Llenando lista ordenable de máquinas" << endl;
     //copiar máquinas
     list<maquina> maquinas_sort;
     for (int m = 0; m < maquinas_num; ++m)
@@ -226,6 +285,8 @@ int solucion::llenarSolucion()
         maquinas_sort.push_back(maquinas[m]);
     }
     list<maquina>::iterator maq_i;
+
+    cout << "Obteniendo espacio disponible" << endl;
 
     //llenar matriz de espacio disponible en las máquinas
     for(int m = 0; m < maquinas_num; ++m)
@@ -238,7 +299,7 @@ int solucion::llenarSolucion()
             {
                 //si el recurso es transitivo, está ocupado por el movimiento anterior
                 //basta con igualarlo en esta parte
-                espacio_disponible[m][r] = sol_inicial.espacio_disponible[m][r];
+                espacio_disponible[m][r] = sol_inicial->espacio_disponible[m][r];
 
                 //hasta ahora, maquinas_sort está ordenado por id
                 //así que se puede acceder directamente (en teoría)
@@ -248,6 +309,8 @@ int solucion::llenarSolucion()
         //avanzar el iterador
         advance(maq_i, 1);
     }
+
+    cout << "Primer ordenamiento lista de máquinas" << endl;
 
     //ahora se ordena la lista
     //de ahora en adelante no se asegura que los id de las máquinas sean correlativos
@@ -266,6 +329,8 @@ int solucion::llenarSolucion()
     int m_id;               //id de la máquina
     int srv, dep, srv_dep;  //parámetros del proceso
     int loc, vec;           //parámetros de la máquina
+
+    cout << "Revisando todos los procesos" << endl;
 
     //loop principal
     for(int p = 0; p < procesos_num; ++p)
@@ -288,18 +353,30 @@ int solucion::llenarSolucion()
             for(int r = 0; r < recursos_num; ++r)
             {
                 //para cada recurso, ver si hay suficiente espacio en la máquina
-                if(espacio_disponible[m_id][r] < procesos[p].getUsoRecursos(r)) insert_ok = false;
+                if(espacio_disponible[m_id][r] < procesos[p].getUsoRecursos(r))
+                {
+                    cout << "P" << p << "en M" << m_id << " rechazo por falta de recursos" << endl;
+                    insert_ok = false;
+                }
             }
 
             //Conflicto de servicios
-            if (servicio_maquina[srv][m_id]) insert_ok = false;
+            if (servicio_maquina[srv][m_id])
+            {
+                cout << "P" << p << "en M" << m_id << " rechazo por colisión de servicio" << endl;
+                insert_ok = false;
+            }
 
             //Conflicto de localizaciones (según spreadmin)
             if(spread_servicios[srv] < servicios[srv].getSpreadmin())
             {
                 //servicio no cumple con spreadmin
                 //si ya hay un proceso en la localización, buscar otra máquina
-                if (servicio_localizacion[srv][loc] > 0) insert_ok = false;
+                if (servicio_localizacion[srv][loc] > 0)
+                {
+                    cout << "P" << p << "en M" << m_id << " rechazo por falta de spread" << endl;
+                    insert_ok = false;
+                }
             }//else, servicio cumple con spreadmin, carry on
 
             //Conflicto de vecindarios (según dependencia)
@@ -310,7 +387,11 @@ int solucion::llenarSolucion()
                 {
                     srv_dep = servicios[srv].getDependencia(d);
                     //si una de las dependencias no se cumple en la máquina, descartar la máquina
-                    if (servicio_vecindario[srv_dep][vec] == 0) insert_ok = false;
+                    if (servicio_vecindario[srv_dep][vec] == 0)
+                    {
+                        cout << "P" << p << "en M" << m_id << " rechazo por falta de dependencia" << endl;
+                        insert_ok = false;
+                    }
                 }
             }//else, servicio no tiene dependencias, carry on
 
@@ -335,6 +416,7 @@ int solucion::llenarSolucion()
                 spread_servicios[srv] += 1;
 
                 //lista la agregación, pasar al siguiente proceso
+                cout << "P" << p << "en M" << m_id << " ingresa correctamente" << endl;
                 break;
             }
             //si no hay insert_ok, entonces probar con la siguiente máquina
@@ -344,14 +426,19 @@ int solucion::llenarSolucion()
         //se revisaron todas las máquinas
         if (!insert_ok) //después de ver todas las máquinas no metí el proceso en ningún lado
         {
+            cout << "P" << p << "no pudo insertarse, pasa a cola" << endl;
             procesos_cola.push_back(procesos[p]);
         }
         //seguir con el siguiente proceso; ordenar la lista de máquinas
+        cout << "Reordenando lista de máquinas" << endl;
         maquinas_sort.sort();
         //continue;
     }//endfor(procesos)
 
+    cout << "Fin de revisión de procesos" << endl;
+
     //revisar cola de procesos no agregados
+    cout << "Revisando cola de procesos no agregados" << endl;
     int p;
     size_t size_cola = procesos_cola.size();
     while (!procesos_cola.empty())
@@ -378,18 +465,30 @@ int solucion::llenarSolucion()
                 for(int r = 0; r < recursos_num; ++r)
                 {
                     //para cada recurso, ver si hay suficiente espacio en la máquina
-                    if(espacio_disponible[m_id][r] < procesos[p].getUsoRecursos(r)) insert_ok = false;
+                    if(espacio_disponible[m_id][r] < procesos[p].getUsoRecursos(r))
+                    {
+                        cout << "P" << p << "en M" << m_id << " rechazo por falta de recursos" << endl;
+                        insert_ok = false;
+                    }
                 }
 
                 //Conflicto de servicios
-                if (servicio_maquina[srv][m_id]) insert_ok = false;
+                if (servicio_maquina[srv][m_id])
+                {
+                    cout << "P" << p << "en M" << m_id << " rechazo por colisión de servicio" << endl;
+                    insert_ok = false;
+                }
 
                 //Conflicto de localizaciones (según spreadmin)
                 if(spread_servicios[srv] < servicios[srv].getSpreadmin())
                 {
                     //servicio no cumple con spreadmin
                     //si ya hay un proceso en la localización, buscar otra máquina
-                    if (servicio_localizacion[srv][loc] > 0) insert_ok = false;
+                    if (servicio_localizacion[srv][loc] > 0)
+                    {
+                        cout << "P" << p << "en M" << m_id << " rechazo por falta de spread" << endl;
+                        insert_ok = false;
+                    }
                 }//else, servicio cumple con spreadmin, carry on
 
                 //Conflicto de vecindarios (según dependencia)
@@ -400,7 +499,11 @@ int solucion::llenarSolucion()
                     {
                         srv_dep = servicios[srv].getDependencia(d);
                         //si una de las dependencias no se cumple en la máquina, descartar la máquina
-                        if (servicio_vecindario[srv_dep][vec] == 0) insert_ok = false;
+                        if (servicio_vecindario[srv_dep][vec] == 0)
+                        {
+                            cout << "P" << p << "en M" << m_id << " rechazo por falta de dependencia" << endl;
+                            insert_ok = false;
+                        }
                     }
                 }//else, servicio no tiene dependencias, carry on
 
@@ -425,6 +528,8 @@ int solucion::llenarSolucion()
                     spread_servicios[srv] += 1;
 
                     //lista la agregación: eliminar de la cola y pasar al siguiente
+                    cout << "P" << p << "en M" << m_id << " ingresa correctamente" << endl;
+                    cout << "Eliminando P" << p << " de la cola" << endl;
                     procesos_cola.erase(proc_i);
                     break;
                 }
@@ -437,12 +542,13 @@ int solucion::llenarSolucion()
         //la cantidad de procesos en la cola
         if (size_cola == procesos_cola.size())
         {
-            //esto es inútil
+            cout << "resistance is futile (nada se agregó)" << endl;
             break;
         }
         else
         {
             //intentamos nuevamente
+            cout << "Revisando si quedan procesos" << endl;
             size_cola = procesos_cola.size();
         }
         //a estas alturas debiera no importar mucho el orden de las máquinas
@@ -458,10 +564,66 @@ int solucion::llenarSolucion()
         //necesito asegurarme que asigné todo, más vale prevenir(?)
         for (int p = 0; p < procesos_num; ++p)
         {
-            if (asignacion_procesos[p] == -1) insert_ok = false;
-            break;
+            cout << "Revisando asignacion de procesos" << endl;
+            if (asignacion_procesos[p] == -1)
+            {
+                cout << "Proceso " << p << " quedó sin asignación!!" << endl;
+                insert_ok = false;
+                break;
+            }
         }
+        if (insert_ok) cout << "Todos los procesos asignados." << endl;
     }
+
+    cout << "Fin del algoritmo greedy." << endl;
+    cout << endl << "Resumen de las estructuras de datos:" << endl;
+
+    cout << "Vector de procesos vs máqunas:" << endl;
+    for (int p = 0; p < procesos_num; ++p) cout << asignacion_procesos[p] << ' ';
+    cout << endl;
+    cout << "Espacio disponible por máquina:" << endl;
+    for (int m = 0; m < maquinas_num; ++m)
+    {
+        cout << "Maq " << m << ": ";
+        for (int r = 0; r < recursos_num; ++r)
+        {
+            cout << espacio_disponible[m][r] << " ";
+        }
+        cout << endl;
+    }
+    cout << "Matriz srv/maq:" << endl;
+    for (int s = 0; s < servicios_num; ++s)
+    {
+        for (int m = 0; m < maquinas_num; ++m)
+        {
+            cout << (int)servicio_maquina[s][m] << " ";
+        }
+        cout << endl;
+    }
+    cout << "Matriz srv/loc:" << endl;
+    for (int s = 0; s < servicios_num; ++s)
+    {
+        for (int l = 0; l < localizaciones_num; ++l)
+        {
+            cout << servicio_localizacion[s][l] << " ";
+        }
+        cout << endl;
+    }
+    cout << "Matriz srv/vec:" << endl;
+    for (int s = 0; s < servicios_num; ++s)
+    {
+        for (int v = 0; v < vecindarios_num; ++v)
+        {
+            cout << servicio_vecindario[s][v] << " ";
+        }
+        cout << endl;
+    }
+    cout << "Spread de los servicios:" << endl;
+    for (int s = 0; s < servicios_num; ++s)
+    {
+        cout << spread_servicios[s] << " ";
+    }
+    cout << endl << endl;
 
     //true si está todo hecho, false si no se pudo agregar algo
     return insert_ok;
