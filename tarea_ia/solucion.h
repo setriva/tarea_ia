@@ -54,6 +54,9 @@ public:
     bool llenarSolucion();              //aplicar greedy
     int llenarSolucion(ifstream& fsol);  //leer archivo entrada
 
+    bool ordenProcesoPrioridad(const proceso& left, const proceso& right) const;
+    bool ordenProcesoPeso(const proceso& left, const proceso& right) const;
+
 private:
 //Parámetros del modelo
     //Costos

@@ -56,6 +56,11 @@ int servicio::getSpreadmin()
     return spreadmin;
 }
 
+int servicio::getPrioridad()
+{
+	return prioridad;
+}
+
 void servicio::pushProceso(int idProceso)
 {
     idProcesos.push_back(idProceso);

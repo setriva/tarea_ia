@@ -144,6 +144,16 @@ void solucion::setObjetos(vector<proceso>* procs, vector<maquina>* maqs, vector<
     servicios = srvs;
 }
 
+bool solucion::ordenProcesoPrioridad(const proceso &left, const proceso &right) const
+{
+	return (left.getPrioridad() < right.getPrioridad());
+}
+
+bool solucion::ordenProcesoPeso(const proceso &left, const proceso &right) const
+{
+	return (left.getPeso() < right.getPeso());
+}
+
 int solucion::llenarSolucion(ifstream& fsol)
 {
     int maq, srv, loc, vec;
@@ -215,6 +225,7 @@ int solucion::llenarSolucion(ifstream& fsol)
         }
         cout << endl;
     }
+    /*
     cout << "Matriz srv/maq:" << endl;
     for (int s = 0; s < servicios_num; ++s)
     {
@@ -241,7 +252,7 @@ int solucion::llenarSolucion(ifstream& fsol)
             cout << servicio_vecindario.at(s).at(v) << " ";
         }
         cout << endl;
-    }
+    }*/
     cout << "Spread de los servicios:" << endl;
     for (int s = 0; s < servicios_num; ++s)
     {
@@ -306,41 +317,31 @@ bool solucion::llenarSolucion()
     //de ahora en adelante no se asegura que los id de las máquinas sean correlativos
     maquinas_sort.sort();
 
-    //Ordenando servicios
-    cout << "Ordenamiento de servicios" << endl;
-    list<servicio> servicios_sort;
-    for (size_t s = 0; s < servicios->size(); ++s)
-    {
-    	servicios_sort.push_back(servicios->at(s));
-    }
-    //Servicios se ordenan en reversa (mayor a menor prioridad)
-    servicios_sort.sort();
-    servicios_sort.reverse();
-
     //Cola de procesos
     list<proceso> procesos_cola;
     list<proceso>::iterator proc_i;
 
-    //llenando la cola de procesos por prioridad de servicios
-    //(esto se encarga de restricciones de servicio, spreadmin y dependencias)
-    for (vector<servicio>::iterator is = servicios->begin(); is != servicios->end(); ++is)
+    //agregar todos los procesos a la cola
+    for (size_t p = 0; p < procesos->size(); ++p)
     {
-    	auxvec.clear();
-    	auxvec = is->getListaProcesos();
-    	for (size_t p = 0; p < auxvec.size(); ++p)
-    	{
-    		procesos_cola.push_back(procesos->at(auxvec.at(p)));
-    	}
+    	procesos_cola.push_back(procesos->at(p));
     }
 
-    //me aseguro que agregué todos (todos) los procesos a la cola
-    size_t proc = procesos->size();
-    size_t proc_c = procesos_cola.size();
-    if (proc != proc_c)
-    {
-    	cout << "Error al agregar los procesos a la cola!" << endl;
-    	return -1;
-    }
+    //cada proceso tiene una prioridad (dada por el servicio al que pertenece) y un peso
+    //el orden en que ingresan los procesos a las máquinas debe ser por prioridad y por peso
+    //se ordena primero por peso y después por prioridad; de forma que dentro de los procesos
+    //con igual prioridad, vayan los más pesados primero
+
+    procesos_cola.reverse();
+
+    //del más ligero al más pesado
+    //procesos_cola.sort([](const proceso& l, const proceso& r){return l.getPeso() < r.getPeso();});
+
+    //del menos prioritario al más prioritario
+    procesos_cola.sort([](const proceso& l, const proceso& r){return l.getPrioridad() < r.getPrioridad();});
+
+    //la lista va del más pesado y más prioritario hacia abajo
+    procesos_cola.reverse();
 
     //en este punto las máquinas están vacías, hay que empezar a llenarlas
     //la lista se ordena después de cada inserción (al final del loop principal)
@@ -383,7 +384,7 @@ bool solucion::llenarSolucion()
                     //para cada recurso, ver si hay suficiente espacio en la máquina
                     if(espacio_disponible.at(m_id).at(r) < procesos->at(p).getUsoRecursos(r))
                     {
-                        cout << "P" << p << "en M" << m_id << " rechazo por falta de recursos" << endl;
+                        cout << "P" << p << " en M" << m_id << " rechazo por falta de recursos" << endl;
                         insert_ok = false;
                         break;
                     }
@@ -449,6 +450,9 @@ bool solucion::llenarSolucion()
                     cout << "Eliminando P" << p << " de la cola" << endl;
                     //procesos_cola.erase devuelve el siguiente iterador
                     proc_i = procesos_cola.erase(proc_i);
+                    //ordenar máquinas
+                    cout << "Reordenando máquinas" << endl;
+                    maquinas_sort.sort();
                     break;
                 }
                 //si no hay insert_ok, entonces probar con la siguiente máquina
@@ -476,8 +480,7 @@ bool solucion::llenarSolucion()
             cout << "Revisando si quedan procesos" << endl;
             size_cola = procesos_cola.size();
         }
-        //ordenar máquinas
-        maquinas_sort.sort();
+
     }//endwhile(cola vacía)
 
     //fin del greedy
@@ -515,6 +518,7 @@ bool solucion::llenarSolucion()
 		}
 		cout << endl;
 	}
+	/*
 	cout << "Matriz srv/maq:" << endl;
 	for (int s = 0; s < servicios_num; ++s)
 	{
@@ -542,6 +546,7 @@ bool solucion::llenarSolucion()
 		}
 		cout << endl;
 	}
+	*/
 	cout << "Spread de los servicios:" << endl;
 	for (int s = 0; s < servicios_num; ++s)
 	{

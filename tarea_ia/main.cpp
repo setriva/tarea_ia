@@ -276,6 +276,18 @@ int main(int argc, char **argv)
     {
     	is->calcularPrioridad();
     }
+    //pasar prioridad a los procesos
+    for (vector<proceso>::iterator ip = procesos.begin(); ip != procesos.end(); ++ip)
+    {
+    	ip->setPrioridad(servicios.at(ip->getServicio()).getPrioridad());
+    }
+
+    cout << "Prioridades de los procesos:" << endl;
+    for (int i = 0; i < procesos_num; ++i)
+    {
+    	cout << procesos.at(i).getPrioridad() << ' ';
+    }
+    cin.get();
 
     //balanceadores
     instancia >> line;
@@ -367,6 +379,7 @@ int main(int argc, char **argv)
     if (!greedy)
     {
         cout << "Algoritmo greedy no funcionó, se descartará." << endl;
+
     }
 
     fin_lectura = chrono::high_resolution_clock::now();

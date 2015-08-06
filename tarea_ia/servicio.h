@@ -19,6 +19,7 @@ public:
     int getSpreadmin();
     int getDependencia(int id);
     int getDependenciaNum();
+    int getPrioridad();
 
     //manipulación de procesos
     void pushProceso(int newProceso);

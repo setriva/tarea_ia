@@ -23,6 +23,7 @@ public:
     void setUsoRecursos(int id, int valor);
     void setUsoRecursos(vector<int> vec);
     void setCosteMovimiento(int nCoste);
+    void setPrioridad(int prior);
     //getters
     int getId();
     int getServicio();
@@ -30,10 +31,17 @@ public:
     vector<int> getUsoRecursosVector();
     int getCosteMovimiento();
 
+    void calcularPeso();
+    int getPeso() const;
+    int getPrioridad() const;
+
 private:
     int id_proceso;
     int id_servicio;
     vector<int> usoRecursos;
     int coste_movimiento;
+    //ordenamiento
+    int prioridad;
+    int peso;
 };
 

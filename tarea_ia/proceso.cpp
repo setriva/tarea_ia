@@ -6,6 +6,8 @@ proceso::proceso()
     id_servicio = -1;
     usoRecursos = vector<int>();
     coste_movimiento = 0;
+    prioridad = 0;
+    peso = 0;
 }
 
 void proceso::initRecursos(int recursos_num)
@@ -26,16 +28,23 @@ void proceso::setServicio(int nServicio)
 void proceso::setUsoRecursos(int id, int valor)
 {
     usoRecursos.at(id) = valor;
+    calcularPeso();
 }
 
 void proceso::setUsoRecursos(vector<int> vec)
 {
 	usoRecursos = vec;
+	calcularPeso();
 }
 
 void proceso::setCosteMovimiento(int nCoste)
 {
     coste_movimiento = nCoste;
+}
+
+void proceso::setPrioridad(int prior)
+{
+	prioridad = prior;
 }
 
 int proceso::getUsoRecursos(int recurso)
@@ -56,4 +65,30 @@ int proceso::getId()
 int proceso::getServicio()
 {
     return id_servicio;
+}
+
+int proceso::getPeso() const
+{
+	return peso;
+}
+
+int proceso::getPrioridad() const
+{
+	return prioridad;
+}
+
+void proceso::calcularPeso()
+{
+	try
+	{
+		for (size_t r = 0; r < usoRecursos.size(); ++r)
+				peso += usoRecursos.at(r);
+
+		peso = peso / usoRecursos.size();
+	}
+	catch (...)
+	{
+
+	}
+
 }
