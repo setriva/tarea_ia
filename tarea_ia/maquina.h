@@ -38,6 +38,7 @@ public:
 
     int getEspacioMax(int recurso);
     vector<int> getEspacioMaxVector();
+    vector<int> getEspacioSafeVector();
 
     //funciones para el greedy
     void calcular_capacidad();

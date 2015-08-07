@@ -17,14 +17,15 @@ using namespace std;
 //COMPILAR CON FLAG -std=c++11
 
 /* mrp:
- * -t time limit
- * -p instance_filename
- * -i original_solution_filename
- * -o new_solution_filename
+ * -t tiempo límite
+ * -p modelo
+ * -i solución inicial
+ * -o solución nueva
  * -s seed
- * -T initial temperature
- * -N constant temp iterations
+ * -T temperatura inicial
+ * -N iteraciones constantes
  * -R cooling ratio
+ * -c limitación espacio de búsqueda
  */
 
 int main(int argc, char **argv)

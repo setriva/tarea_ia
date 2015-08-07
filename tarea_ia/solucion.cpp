@@ -80,12 +80,65 @@ solucion::solucion(const solucion& sol, bool mantener_inicial)
     setObjetos(sol.procesos, sol.maquinas, sol.servicios);
 }
 
-//esta es la parte que se pone interesante
 int solucion::getCostoSolucion()
 {
     costo_solucion = 0;
 
-    //do stuff
+    //Temps
+    int costo_carga = 0;
+    int costo_balance = 0;
+    int costo_movproceso = 0;
+    int costo_movservicio = 0;
+    int costo_movmaquina = 0;
+
+    //Costo de carga: cuánto se pasa la máquina de su safety cost
+    //recordar ponderar por cada recurso
+
+    vector<int> exceso_carga(recursos_num);	//exceso TOTAL de carga
+    vector<int> uvec(recursos_num);	//espacio utilizado
+    vector<int> svec(recursos_num);	//capacidad de seguridad
+    vector<int> exc(recursos_num);	//espacio máximo
+
+    for (vector<maquina>::iterator im = maquinas->begin(); im != maquinas->end(); ++im)
+    {
+    	uvec = im->getEspacioMaxVector();
+    	svec = im->getEspacioSafeVector();
+    	for (int r = 0; r < recursos_num; ++r)
+    	{
+    		//obtener espacio utilizado en base al disponible
+    		uvec.at(r) -= espacio_disponible.at(im->getId()).at(r);
+    		//restar espacio utilizado y capacidad segura
+    		exc.at(r) = svec.at(r) - uvec.at(r);
+    		//si es menor a 0, que sea 0
+    		if (exc.at(r) < 0) exc.at(r) = 0;
+    		//agregar al exceso de carga
+    		exceso_carga.at(r) += exc.at(r);
+    	}
+    }
+
+    for (int r = 0; r < recursos_num; ++r)
+    {
+    	//ponderar costo de carga
+    	costo_carga += (exceso_carga.at(r) * peso_recursos->at(r));
+    }
+
+    costo_solucion += costo_carga;
+
+    //Costo de balance: cuánto se pasa el recurso R2 de ratio veces el recurso R1
+
+    costo_solucion += (costo_balance * peso_balance);
+
+    //Costo movimiento procesos: suma de ip->getCosteMovimiento de asignaciones distintas a sol_inicial
+
+    costo_solucion += (costo_movproceso * peso_proceso);
+
+    //Costo movimiento servicio: max(procesos movidos de un servicio)
+
+    costo_solucion += (costo_movservicio * peso_servicio);
+
+    //Costo movimiento máquinas: sumar: cmm[sol_inicial->asignación][this->asignación] para cada proceso
+
+    costo_solucion += (costo_movmaquina * peso_maquina);
 
     return costo_solucion;
 }

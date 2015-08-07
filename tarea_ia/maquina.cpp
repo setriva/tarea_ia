@@ -100,6 +100,11 @@ vector<int> maquina::getEspacioMaxVector()
 	return capacidad_max;
 }
 
+vector<int> maquina::getEspacioSafeVector()
+{
+	return capacidad_safe;
+}
+
 void maquina::calcular_capacidad()
 {
     capacidad_disponible = 0.0f;
