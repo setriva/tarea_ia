@@ -4,6 +4,9 @@
 #include <vector>
 
 #include <chrono>
+#include <cmath>
+#include <ctime>
+#include <random>
 
 #include "proceso.h"
 #include "servicio.h"
@@ -16,7 +19,7 @@ using namespace std;
 
 //COMPILAR CON FLAG -std=c++11
 
-/* mrp:
+/* tarea_ia:
  * -t tiempo límite
  * -p modelo
  * -i solución inicial
@@ -25,7 +28,8 @@ using namespace std;
  * -T temperatura inicial
  * -N iteraciones constantes
  * -R cooling ratio
- * -c limitación espacio de búsqueda
+ * -C limitación espacio de búsqueda
+ * -A chance move
  */
 
 int main(int argc, char **argv)
@@ -57,38 +61,107 @@ int main(int argc, char **argv)
     int auxint;
     vector<int> auxvec;
 
+    //Variables de ejecución
+    int tiempo_limite = 300;
+    int semilla;
+    try
+    {
+    	random_device rd;
+    	semilla = rd();
+    }
+    catch (...)
+    {
+    	if (!cmdOptionExists(argv, argv+argc, "-s"))
+    	{
+    		cout << "Se requiere ingresar una semilla!" << endl;
+    		return -1;
+    	}
+    	semilla = stoi(getCmdOption(argv, argv+argc, "-s"));
+    }
+    long double temperatura_inicial = 1e7l;
+    long double iteraciones_temperatura = 1e5l;
+    int tam_busqueda = 50;
+    float ratio_enfriamiento = 0.97f;
+    float chance_move = 0.7f;
+    string file_salida = "output.txt";
+
+    //Texto de ayuda
+    if (argc < 2)
+    {
+    	cout << "tarea_ia: parámetros" << endl;
+    	cout << "-p \t Archivo model" << endl;
+    	cout << "-i \t Archivo assignment" << endl;
+    	cout << "-o \t Solución encontrada (default output.txt)" << endl;
+    	cout << "-t \t Tiempo límite de ejecución (default 300)" << endl;
+    	cout << "-s \t Semilla (default random)" << endl;
+    	cout << "-T \t Temperatura inicial (10^T) (default 7)" << endl;
+    	cout << "-N \t Iteraciones (10^N) manteniendo temperatura (default 5)" << endl;
+    	cout << "-C \t Limitación del espacio de búsqueda (default 50)" << endl;
+    	cout << "-A \t Probabilidad de escoger move sobre swap (default 0.7)" << endl;
+    	cout << "-R \t Razón de enfriamiento (default 0.97)" << endl;
+    }
+
+    //logging
+    time_t rawtime;
+    struct tm * timeinfo;
+    char buffer[80];
+    time (&rawtime);
+    timeinfo = localtime(&rawtime);
+    strftime(buffer,80,"%Y%m%d_%I%M%S",timeinfo);
+
+    string logstr;
+    logstr.append("log_");
+    logstr.append(buffer);
+    logstr.append(".txt");
+    ofstream log(logstr);
+    cout << "Se ingresará log en archivo: " << logstr << endl;
+    streambuf* coutbuf = cout.rdbuf();
+    cout.rdbuf(log.rdbuf());
+
     //Abrir instancia
+    if (!cmdOptionExists(argv, argv+argc, "-p"))
+    {
+    	cout.rdbuf(coutbuf);
+    	cout << "Falta el archivo de instancia." << endl;
+    	return -1;
+    }
     char* fi = getCmdOption(argv, argv+argc, "-p");
     string fileInstancia(fi);
-    if (fileInstancia.empty())
-    {
-        cout << "Falta el archivo de instancia.\n";
-        return -1;
-    }
     ifstream instancia(fileInstancia, ifstream::in);
     if (!instancia.good())
     {
-        cout << "Instancia no existe!" << endl;
+    	cout.rdbuf(coutbuf);
+        cout << "Instancia no existe!";
+        cout << "(intentando con " << fileInstancia << ")"<<  endl;
         return -1;
     }
 
     //Abrir solución inicial
-    char* fsi = getCmdOption(argv, argv+argc, "-i");
-    string fileSolInicial(fsi);
-    if (fileSolInicial.empty())
+    if (!cmdOptionExists(argv, argv+argc, "-i"))
     {
+    	cout.rdbuf(coutbuf);
         cout << "Falta el archivo de solución inicial.\n";
         return -1;
     }
+    char* fsi = getCmdOption(argv, argv+argc, "-i");
+    string fileSolInicial(fsi);
     ifstream fsol(fileSolInicial, ifstream::in);
     if (!fsol.good())
     {
+    	cout.rdbuf(coutbuf);
         cout << "Solución inicial no existe!" << endl;
         return -1;
     }
 
     cout << "La instancia es " << fileInstancia << endl;
     cout << "Solución inicial es " << fileSolInicial << endl;
+
+    if (cmdOptionExists(argv, argv+argc, "-s"))	//semilla
+    {
+    	semilla = stoi(getCmdOption(argv, argv+argc, "-s"));
+    }
+    mt19937 mt(semilla);
+    cout << "Se utiliza la semilla " << semilla << "." << endl;
 
     cout << endl;
     cout << "Se iniciará lectura de instancia." << endl;
@@ -288,7 +361,7 @@ int main(int argc, char **argv)
     {
     	cout << procesos.at(i).getPrioridad() << ' ';
     }
-    cin.get();
+
 
     //balanceadores
     instancia >> line;
@@ -305,6 +378,9 @@ int main(int argc, char **argv)
         //ratio
         instancia >> line;
         auxvec.push_back(stoi(line));
+        //peso del balanceador
+        instancia >> line;
+        auxvec.push_back(stoi(line));
         //guardar
         balances.push_back(auxvec);
 
@@ -312,14 +388,12 @@ int main(int argc, char **argv)
     //set en solución inicial
     sol_inicial.setBalanceTriple(&balances);
     //set en las máquinas (para el balanceo de espacio libre)
-    for (vector<maquina>::iterator im = maquinas.begin(); im != maquinas.end(); ++im)
+    /*for (vector<maquina>::iterator im = maquinas.begin(); im != maquinas.end(); ++im)
     {
     	im->setBalances(&balances);
-    }
+    }*/
 
     //pesos finales
-    instancia >> line;
-    sol_inicial.setPesoBalance(stoi(line));
     instancia >> line;
     sol_inicial.setPesoMoverProceso(stoi(line));
     instancia >> line;
@@ -357,6 +431,7 @@ int main(int argc, char **argv)
     //leer archivo
     if (sol_inicial.llenarSolucion(fsol) != 0)
     {
+    	cout.rdbuf(coutbuf);
         cout << "Algo pasó" << endl;
         return -1;
     }
@@ -377,16 +452,65 @@ int main(int argc, char **argv)
     cout << "Iniciando algoritmo greedy." << endl;
 
     bool greedy = sol_nueva.llenarSolucion();
-    if (!greedy)
-    {
-        cout << "Algoritmo greedy no funcionó, se descartará." << endl;
-
-    }
 
     fin_lectura = chrono::high_resolution_clock::now();
     cout << "Tiempo de generación de solución: " << chrono::duration_cast<chrono::milliseconds>(fin_lectura-inicio_lectura).count() << "ms" << endl;
 
+    if (!greedy)
+    {
+        cout << "Algoritmo greedy no funcionó, se descartará." << endl;
+        sol_nueva.descartarGreedy();
+    }
+
+    cout << endl << "Iniciando algoritmo Simulated Annealing." << endl;
+
+    //Obteniendo parámetros de SA
+    if (cmdOptionExists(argv, argv+argc, "-o"))	//output sol encontrada
+    {
+    	file_salida = string(getCmdOption(argv, argv+argc, "-o"));
+    }
+    cout << "El archivo de salida es " << file_salida << "." << endl;
+
+    if (cmdOptionExists(argv, argv+argc, "-t"))	//tiempo limite
+    {
+    	tiempo_limite = stoi(getCmdOption(argv, argv+argc, "-t"));
+    }
+    cout << "Se ejecutará el algoritmo durante " << tiempo_limite << "segundos." << endl;
+
+    if (cmdOptionExists(argv, argv+argc, "-T"))	//temp inicial
+    {
+    	auxint = stoi(getCmdOption(argv, argv+argc, "-T"));
+    	temperatura_inicial = pow(10, auxint);
+    }
+    cout << "Temperatura inicial es " << temperatura_inicial << endl;
+
+    if (cmdOptionExists(argv, argv+argc, "-N"))	//iter temp cte
+    {
+    	auxint = stoi(getCmdOption(argv, argv+argc, "-N"));
+    	iteraciones_temperatura = pow(10, auxint);
+    }
+    cout << "Iteraciones manteniendo temperatura: " << iteraciones_temperatura << endl;
+
+    if (cmdOptionExists(argv, argv+argc, "-C"))	//limit esp busq
+    {
+    	tam_busqueda = stoi(getCmdOption(argv, argv+argc, "-C"));
+    }
+    cout << "Límite del espacio de búsqueda: " << tam_busqueda << endl;
+
+    if (cmdOptionExists(argv, argv+argc, "-A"))	//chance move
+    {
+    	chance_move = stof(getCmdOption(argv, argv+argc, "-A"));
+    }
+    cout << "Probabilidad de move sobre swap: " << chance_move << endl;
+
+    if (cmdOptionExists(argv, argv+argc, "-R"))	//cool ratio
+    {
+    	ratio_enfriamiento = stof(getCmdOption(argv, argv+argc, "-R"));
+    }
+    cout << "Razón de enfriamiento: " << ratio_enfriamiento << endl;
 
 
+    cout.rdbuf(coutbuf);
+    cout << "Ejecución finalizada.";
     return 0;
 }

@@ -8,7 +8,6 @@ solucion::solucion()
     balances_num = 0;
     balances = NULL;
 
-    peso_balance = 0;
     peso_proceso = 0;
     peso_servicio = 0;
     peso_maquina = 0;
@@ -61,7 +60,6 @@ solucion::solucion(const solucion& sol, bool mantener_inicial)
     balances = sol.balances;
 
     //pesos
-    peso_balance = sol.peso_balance;
     peso_proceso = sol.peso_proceso;
     peso_servicio = sol.peso_servicio;
     peso_maquina = sol.peso_maquina;
@@ -80,7 +78,7 @@ solucion::solucion(const solucion& sol, bool mantener_inicial)
     setObjetos(sol.procesos, sol.maquinas, sol.servicios);
 }
 
-int solucion::getCostoSolucion()
+void solucion::calcularCostoSolucion()
 {
     costo_solucion = 0;
 
@@ -98,14 +96,16 @@ int solucion::getCostoSolucion()
     vector<int> uvec(recursos_num);	//espacio utilizado
     vector<int> svec(recursos_num);	//capacidad de seguridad
     vector<int> exc(recursos_num);	//espacio máximo
-
+    int bal, r1, r2, ratio;			//parámetros de balanceo
     for (vector<maquina>::iterator im = maquinas->begin(); im != maquinas->end(); ++im)
     {
+    	//cálculo del costo de carga
     	uvec = im->getEspacioMaxVector();
     	svec = im->getEspacioSafeVector();
     	for (int r = 0; r < recursos_num; ++r)
     	{
     		//obtener espacio utilizado en base al disponible
+    		//mantener el espacio transitivo como referencia al espacio disponible
     		uvec.at(r) -= espacio_disponible.at(im->getId()).at(r);
     		//restar espacio utilizado y capacidad segura
     		exc.at(r) = svec.at(r) - uvec.at(r);
@@ -114,43 +114,78 @@ int solucion::getCostoSolucion()
     		//agregar al exceso de carga
     		exceso_carga.at(r) += exc.at(r);
     	}
+
+    	//cálculo del costo de balance
+    	//cuánto se pasa el recurso R2 de ratio veces el recurso R1
+    	for (int b = 0; b < balances_num; ++b)
+    	{
+    		//leer trío de balance
+    		r1 = balances->at(b).at(0);
+    		r2 = balances->at(b).at(1);
+    		ratio = balances->at(b).at(2);
+    		//calcular balance
+    		bal = ((uvec.at(r1) * ratio) - uvec.at(r2));
+    		//sumar ponderado
+    		costo_balance += (balances->at(b).at(3) * bal);
+    	}
     }
 
+    //ponderar costo de carga
     for (int r = 0; r < recursos_num; ++r)
     {
-    	//ponderar costo de carga
     	costo_carga += (exceso_carga.at(r) * peso_recursos->at(r));
     }
 
+    //sumar costo carga ponderado
     costo_solucion += costo_carga;
 
-    //Costo de balance: cuánto se pasa el recurso R2 de ratio veces el recurso R1
-
-    costo_solucion += (costo_balance * peso_balance);
+    //sumar costo balance ponderado
+    costo_solucion += costo_balance;
 
     //Costo movimiento procesos: suma de ip->getCosteMovimiento de asignaciones distintas a sol_inicial
+    //Costo movimiento servicio: max(procesos movidos de un servicio)
+    //Costo movimiento máquinas: sumar: cmm[sol_inicial->asignación][this->asignación] para cada proceso
+    vector<int> srv_mov(servicios_num, 0);
+    int mi, mf;		//maquina inicial, maquina final
+    for (int p = 0; p < procesos_num; ++p)
+    {
+    	mi = sol_inicial->asignacion_procesos.at(p);
+    	mf = this->asignacion_procesos.at(p);
+    	if (mi != mf)
+    	{
+    		//sumar costes de movimiento
+    		costo_movproceso += procesos->at(p).getCosteMovimiento();
+    		//contar servicio con movimiento
+    		srv_mov.at(procesos->at(p).getServicio()) += 1;
+    		//sumar coste de movimiento de máquina
+    		costo_movmaquina += costoMovimientoMaquinas->at(mi).at(mf);
+    	}
+    }
 
+    //sumar costo movimiento proceso ponderado
     costo_solucion += (costo_movproceso * peso_proceso);
 
-    //Costo movimiento servicio: max(procesos movidos de un servicio)
+    //anotar servicio con más procesos movidos
+	for (vector<int>::iterator is = srv_mov.begin(); is != srv_mov.end(); ++is)
+	{
+		if (costo_movservicio < *is) costo_movservicio = *is;
+	}
 
+	//sumar costo movimiento servicio ponderado
     costo_solucion += (costo_movservicio * peso_servicio);
 
-    //Costo movimiento máquinas: sumar: cmm[sol_inicial->asignación][this->asignación] para cada proceso
-
+    //sumar costo movimiento maquina ponderado
     costo_solucion += (costo_movmaquina * peso_maquina);
+}
 
-    return costo_solucion;
+int solucion::getCostoSolucion()
+{
+	return costo_solucion;
 }
 
 void solucion::setBalanceTriple(vector<vector<int>>* bals)
 {
     balances = bals;
-}
-
-void solucion::setPesoBalance(int peso)
-{
-    peso_balance = peso;
 }
 
 void solucion::setPesoMoverMaquina(int peso)
@@ -388,7 +423,7 @@ bool solucion::llenarSolucion()
     procesos_cola.reverse();
 
     //del más ligero al más pesado
-    //procesos_cola.sort([](const proceso& l, const proceso& r){return l.getPeso() < r.getPeso();});
+    procesos_cola.sort([](const proceso& l, const proceso& r){return l.getPeso() < r.getPeso();});
 
     //del menos prioritario al más prioritario
     procesos_cola.sort([](const proceso& l, const proceso& r){return l.getPrioridad() < r.getPrioridad();});
@@ -541,10 +576,10 @@ bool solucion::llenarSolucion()
     else
     {
         insert_ok = true;
-        //necesito asegurarme que asigné todo, más vale prevenir(?)
+        //asegurándose de la asignación
+        cout << "Revisando asignación de procesos" << endl;
         for (int p = 0; p < procesos_num; ++p)
         {
-            cout << "Revisando asignacion de procesos" << endl;
             if (asignacion_procesos.at(p) == -1)
             {
                 cout << "Proceso " << p << " quedó sin asignación!!" << endl;
@@ -607,11 +642,19 @@ bool solucion::llenarSolucion()
 	}
 	cout << endl << endl;
 
-    //true si está todo hecho, false si no se pudo agregar algo
+    //true si están todos los procesos asignados, false si no se pudo agregar algo
     return insert_ok;
 }
 
-
+void solucion::descartarGreedy()
+{
+	asignacion_procesos = sol_inicial->asignacion_procesos;
+	spread_servicios = sol_inicial->spread_servicios;
+	espacio_disponible = sol_inicial->espacio_disponible;
+	servicio_maquina = sol_inicial->servicio_maquina;
+	servicio_localizacion = sol_inicial->servicio_localizacion;
+	servicio_vecindario = sol_inicial->servicio_vecindario;
+}
 
 
 

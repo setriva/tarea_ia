@@ -57,6 +57,15 @@ public:
     bool ordenProcesoPrioridad(const proceso& left, const proceso& right) const;
     bool ordenProcesoPeso(const proceso& left, const proceso& right) const;
 
+    void calcularCostoSolucion();
+
+    void descartarGreedy();
+
+    //exploradores
+    bool move();
+    bool swap();
+    bool bigmove();
+
 private:
 //Parámetros del modelo
     //Costos
@@ -65,7 +74,6 @@ private:
     vector<vector<int>>* balances;                     //balancecost
 
     //Pesos
-    int peso_balance;
     int peso_proceso;
     int peso_servicio;
     int peso_maquina;

@@ -1,4 +1,5 @@
 #include "maquina.h"
+#include <limits>
 
 //Funciones de la clase máquina
 maquina::maquina()
@@ -107,8 +108,10 @@ vector<int> maquina::getEspacioSafeVector()
 
 void maquina::calcular_capacidad()
 {
+	//máquinas con menor capacidad disponible se van al final
     capacidad_disponible = 0.0f;
-    for(int r = 0; r < recursos_num; ++r)
+    //opción 1: ponderar recursos y dar el promedio
+    /*for(int r = 0; r < recursos_num; ++r)
     {
         //sumar recurso_disponible / recurso_total para todos los recursos
         capacidad_disponible += (((float)capacidad_max.at(r) - (float)capacidad_utilizada.at(r)) / (float)capacidad_max.at(r));
@@ -116,6 +119,17 @@ void maquina::calcular_capacidad()
 
     //promedio (suma de razones / cantidad de recursos)
     capacidad_disponible = capacidad_disponible / recursos_num;
+    */
+
+    //opción 2: usar como índice el recurso con numéricamente menor capacidad disponible
+    int disp;
+    capacidad_disponible = numeric_limits<int>::max();
+    for (int r = 0; r < recursos_num; ++r)
+    {
+    	disp = capacidad_max.at(r) - capacidad_utilizada.at(r);
+    	if (disp < capacidad_disponible) capacidad_disponible = disp;
+    }
+
 }
 
 bool maquina::operator<(const maquina& maq) const

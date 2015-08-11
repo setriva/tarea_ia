@@ -77,9 +77,15 @@ int proceso::getPrioridad() const
 	return prioridad;
 }
 
+int proceso::getCosteMovimiento()
+{
+	return coste_movimiento;
+}
+
 void proceso::calcularPeso()
 {
-	try
+	//opción 1: promedio
+	/*try
 	{
 		for (size_t r = 0; r < usoRecursos.size(); ++r)
 				peso += usoRecursos.at(r);
@@ -89,6 +95,10 @@ void proceso::calcularPeso()
 	catch (...)
 	{
 
-	}
+	}*/
 
+	//opción 2: máximo uso numérico de recursos
+	peso = 0;
+	for (size_t r = 0; r < usoRecursos.size(); ++r)
+		if (peso < usoRecursos.at(r)) peso = usoRecursos.at(r);
 }
