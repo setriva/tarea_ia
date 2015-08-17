@@ -8,14 +8,26 @@
 #include <ctime>
 #include <random>
 
+#include <csignal>
+#include <cstdlib>
+
 #include "proceso.h"
 #include "servicio.h"
 #include "maquina.h"
 #include "solucion.h"
 
 #include "aux.h"
+//#include "globales.h"
 
 using namespace std;
+using namespace std::chrono;
+
+//mejor solución
+static vector<int> sol_best;		//mejor asignación de procesos
+static long sol_fitness;			//fitness de la mejor asignación
+
+//generador
+std::mt19937 generador;
 
 //COMPILAR CON FLAG -std=c++11
 
@@ -31,6 +43,18 @@ using namespace std;
  * -C limitación espacio de búsqueda
  * -A chance move
  */
+
+void interrumpir(int signum)
+{
+	cout << "Se interrumpió la ejecución del programa!" << endl;
+	cout << "Asignación:" << endl;
+	for (size_t i = 0; i < sol_best.size(); ++i)
+	{
+		cout << sol_best.at(i) << ' ';
+	}
+	cout << endl << "Fitness: " << sol_fitness;
+	exit(0);
+}
 
 int main(int argc, char **argv)
 {
@@ -62,7 +86,7 @@ int main(int argc, char **argv)
     vector<int> auxvec;
 
     //Variables de ejecución
-    int tiempo_limite = 300;
+    chrono::seconds tiempo_limite(300);
     int semilla;
     try
     {
@@ -78,6 +102,11 @@ int main(int argc, char **argv)
     	}
     	semilla = stoi(getCmdOption(argv, argv+argc, "-s"));
     }
+    if (cmdOptionExists(argv, argv+argc, "-s"))
+    	semilla = stoi(getCmdOption(argv, argv+argc, "-s"));
+    generador = mt19937(semilla);	//variable global externa
+    cout << "Se utiliza la semilla " << semilla << "." << endl;
+
     long double temperatura_inicial = 1e7l;
     long double iteraciones_temperatura = 1e5l;
     int tam_busqueda = 50;
@@ -117,6 +146,11 @@ int main(int argc, char **argv)
     cout << "Se ingresará log en archivo: " << logstr << endl;
     streambuf* coutbuf = cout.rdbuf();
     cout.rdbuf(log.rdbuf());
+
+    //Interrumpir mediante ctrl+c
+    //void (*prev_handler)(int);
+    //prev_handler =
+    signal(SIGINT, interrumpir);
 
     //Abrir instancia
     if (!cmdOptionExists(argv, argv+argc, "-p"))
@@ -160,8 +194,6 @@ int main(int argc, char **argv)
     {
     	semilla = stoi(getCmdOption(argv, argv+argc, "-s"));
     }
-    mt19937 mt(semilla);
-    cout << "Se utiliza la semilla " << semilla << "." << endl;
 
     cout << endl;
     cout << "Se iniciará lectura de instancia." << endl;
@@ -303,6 +335,15 @@ int main(int argc, char **argv)
             cout << "Servicio " << is->getId() << "tiene " << auxvec.size() << "dependencias" << endl;
         }
         //cout << '.';
+    }
+    //guardar en servicio quién depende del mismo (dependientes)
+    for (vector<servicio>::iterator is = servicios.begin(); is != servicios.end(); ++is)
+    {
+    	vector<int> deps = is->getDependenciaVector();
+    	for (vector<int>::iterator id = deps.begin(); id != deps.end(); ++id)
+    	{
+    		servicios.at(*id).setDependiente(is->getId());
+    	}
     }
     //leer procesos
     instancia >> line;
@@ -453,8 +494,8 @@ int main(int argc, char **argv)
 
     bool greedy = sol_nueva.llenarSolucion();
 
-    fin_lectura = chrono::high_resolution_clock::now();
-    cout << "Tiempo de generación de solución: " << chrono::duration_cast<chrono::milliseconds>(fin_lectura-inicio_lectura).count() << "ms" << endl;
+    fin_lectura = high_resolution_clock::now();
+    cout << "Tiempo de generación de solución: " << duration_cast<milliseconds>(fin_lectura-inicio_lectura).count() << "ms" << endl;
 
     if (!greedy)
     {
@@ -462,7 +503,7 @@ int main(int argc, char **argv)
         sol_nueva.descartarGreedy();
     }
 
-    cout << endl << "Iniciando algoritmo Simulated Annealing." << endl;
+    cout << endl << "Leyendo parámetros de algoritmo SA:" << endl;
 
     //Obteniendo parámetros de SA
     if (cmdOptionExists(argv, argv+argc, "-o"))	//output sol encontrada
@@ -473,9 +514,9 @@ int main(int argc, char **argv)
 
     if (cmdOptionExists(argv, argv+argc, "-t"))	//tiempo limite
     {
-    	tiempo_limite = stoi(getCmdOption(argv, argv+argc, "-t"));
+    	tiempo_limite = chrono::seconds(stoi(getCmdOption(argv, argv+argc, "-t")));
     }
-    cout << "Se ejecutará el algoritmo durante " << tiempo_limite << "segundos." << endl;
+    cout << "Se ejecutará el algoritmo durante " << duration_cast<seconds>(tiempo_limite).count() << "segundos." << endl;
 
     if (cmdOptionExists(argv, argv+argc, "-T"))	//temp inicial
     {
@@ -509,6 +550,82 @@ int main(int argc, char **argv)
     }
     cout << "Razón de enfriamiento: " << ratio_enfriamiento << endl;
 
+    //Que empiecen los juegos del hambre
+    cout << endl << "Iniciando algoritmo SA." << endl;
+
+    //Variables de loop SA
+    bool terminar = false;								//salir de la ejecución
+    bool movimiento = false;							//se ejecutó el movimiento?
+    auto inicio_loop = high_resolution_clock::now();	//momento en que inicia la ejecución del loop
+    uniform_real_distribution<float> dado(0.0f, 1.0f);	//tirada de dado (distribución uniforme)
+    sol_fitness = numeric_limits<long>::max();			//worst fitness ever (hay que minimizarlo)
+    int iter_loop = 0;									//iteraciones realizadas
+    int iter_fitness_const = 0;							//iteraciones con fitness no cambiado
+    int iter_mov_rechazado = 0;							//iteraciones sin movimientos posibles
+    long double temperatura = temperatura_inicial; 		//temperatura para trabajar
+    sol_nueva.setTemperatura(temperatura);
+
+    //Loop de SA
+    while(!terminar)
+    {
+    	//realizar movimiento
+    	if(dado(generador) < chance_move)
+    		movimiento = sol_nueva.move();
+    	else
+    		movimiento = sol_nueva.swap();
+
+    	//actualización de iteradores
+    	iter_loop++;
+    	iter_fitness_const++;
+
+    	//si el movimiento quedó como solución nueva, revisar si pasa a ser mejor solución
+    	if (movimiento)
+    	{
+    		if(sol_fitness > sol_nueva.getCostoSolucion())
+    		{
+    			sol_fitness = sol_nueva.getCostoSolucion();
+    			sol_best = sol_nueva.getAsignacion();
+    			iter_fitness_const = 0;
+    		}
+    	}
+    	//si no hay movimientos, se aumenta el contador de movimientos rechazados
+    	else iter_mov_rechazado++;
+
+    	//bajar temperatura (enfriamiento geométrico)
+    	if (iter_loop > iteraciones_temperatura)
+    	{
+    		temperatura = temperatura * exp(ratio_enfriamiento);
+    		sol_nueva.setTemperatura(temperatura);
+
+    		//resetear contadores
+    		iter_loop = 0;
+    		iter_mov_rechazado = 0;
+    	}
+
+    	//subir temperatura:
+    	//no se ha encontrado mejor solución en 20n iteraciones
+    	if (iter_fitness_const > (20*iteraciones_temperatura))
+    	{
+    		//los movimientos rechazados son el 99.9% del total
+    		if (((double)iter_mov_rechazado / (double)iter_loop) >= 0.999)
+    		{
+    			//frozen SA, recalentar
+    			temperatura += (temperatura/100);
+    			sol_nueva.setTemperatura(temperatura);
+
+    			//resetear contadores
+    			iter_loop = 0;
+    			iter_mov_rechazado = 0;
+    			iter_fitness_const = 0;
+    		}
+    	}
+
+    	//revisar si ya pasó el tiempo
+    	if (duration_cast<seconds>(high_resolution_clock::now() - inicio_loop) >= tiempo_limite)
+    	{
+    		terminar = true;
+    	}
+    }
 
     cout.rdbuf(coutbuf);
     cout << "Ejecución finalizada.";

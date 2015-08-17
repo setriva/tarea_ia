@@ -6,6 +6,7 @@ servicio::servicio()
     spreadmin = -1;
     dependencias = vector<int>();
     dependencias_num = 0;
+    dependientes = set<int>();
     idProcesos = vector<int>();
     prioridad = 0;
 }
@@ -44,6 +45,21 @@ int servicio::getDependencia(int id)
 int servicio::getDependenciaNum()
 {
     return dependencias_num;
+}
+
+void servicio::setDependiente(int dep)
+{
+	dependientes.insert(dep);
+}
+
+vector<int> servicio::getDependenciaVector()
+{
+	return dependencias;
+}
+
+vector<int> servicio::getDependientes()
+{
+	return vector<int>(dependientes.begin(), dependientes.end());
 }
 
 int servicio::getId()

@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <set>
 
 using namespace std;
 
@@ -14,11 +15,14 @@ public:
     void initDependencias(int dependencias_num);
     void setDependencia(int id, int valor);
     void setDependencia(vector<int> vec);
+    void setDependiente(int dep);
     //getters
     int getId();
     int getSpreadmin();
     int getDependencia(int id);
     int getDependenciaNum();
+    vector<int> getDependenciaVector();
+    vector<int> getDependientes();
     int getPrioridad();
 
     //manipulación de procesos
@@ -32,8 +36,13 @@ public:
 private:
     int id;
     int spreadmin;
-    vector<int> dependencias;
+    //de quién depende este servicio
     int dependencias_num;
+    vector<int> dependencias;
+
+    //quién depende de este servicio
+    set<int> dependientes;
+
     //esto guarda el ID de los procesos
     vector<int> idProcesos;
     //ordenamiento

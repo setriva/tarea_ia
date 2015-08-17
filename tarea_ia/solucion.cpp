@@ -4,7 +4,7 @@
 
 solucion::solucion()
 {
-    costoMovimientoMaquinas = NULL;
+	costoMovimientoMaquinas = NULL;
     balances_num = 0;
     balances = NULL;
 
@@ -27,18 +27,21 @@ solucion::solucion()
     servicios = NULL;
 
     asignacion_procesos = vector<int>();
-    espacio_disponible = vector<vector<int>>();
+    //espacio_disponible = vector<vector<int>>();
+    uso_procesos = vector<vector<int>>();
+    uso_transitivo = vector<vector<int>>();
     servicio_maquina = vector<vector<bool>>();
     servicio_localizacion = vector<vector<int>>();
     servicio_vecindario = vector<vector<int>>();
     spread_servicios = vector<int>();
 
     costo_solucion = 0;
+    tam_busqueda = 0;
+    temperatura = 0;
 
     //don't even try
     sol_inicial = NULL;
 }
-
 
 
 /* constructor de copia de solución
@@ -100,15 +103,16 @@ void solucion::calcularCostoSolucion()
     for (vector<maquina>::iterator im = maquinas->begin(); im != maquinas->end(); ++im)
     {
     	//cálculo del costo de carga
-    	uvec = im->getEspacioMaxVector();
+    	//uvec = im->getEspacioMaxVector();
     	svec = im->getEspacioSafeVector();
     	for (int r = 0; r < recursos_num; ++r)
     	{
-    		//obtener espacio utilizado en base al disponible
-    		//mantener el espacio transitivo como referencia al espacio disponible
-    		uvec.at(r) -= espacio_disponible.at(im->getId()).at(r);
+    		//sumar uso recursos
+    		uvec.at(r) = uso_procesos.at(im->getId()).at(r);
+    		//sumar transitivos
+    		uvec.at(r) += uso_transitivo.at(im->getId()).at(r);
     		//restar espacio utilizado y capacidad segura
-    		exc.at(r) = svec.at(r) - uvec.at(r);
+    		exc.at(r) = uvec.at(r) - svec.at(r);
     		//si es menor a 0, que sea 0
     		if (exc.at(r) < 0) exc.at(r) = 0;
     		//agregar al exceso de carga
@@ -178,9 +182,14 @@ void solucion::calcularCostoSolucion()
     costo_solucion += (costo_movmaquina * peso_maquina);
 }
 
-int solucion::getCostoSolucion()
+long solucion::getCostoSolucion()
 {
 	return costo_solucion;
+}
+
+vector<int> solucion::getAsignacion()
+{
+	return asignacion_procesos;
 }
 
 void solucion::setBalanceTriple(vector<vector<int>>* bals)
@@ -223,6 +232,9 @@ void solucion::setCantidades(int procs, int maqs, int srvcs, int locs, int vecs)
     servicios_num = srvcs;
     localizaciones_num = locs;
     vecindarios_num = vecs;
+
+    //espacio requerido siempre:
+    uso_transitivo.resize(maquinas_num, vector<int>(recursos_num, 0));
 }
 
 void solucion::setObjetos(vector<proceso>* procs, vector<maquina>* maqs, vector<servicio>* srvs)
@@ -230,6 +242,16 @@ void solucion::setObjetos(vector<proceso>* procs, vector<maquina>* maqs, vector<
     procesos = procs;
     maquinas = maqs;
     servicios = srvs;
+}
+
+void solucion::setTemperatura(long double temp)
+{
+	temperatura = temp;
+}
+
+void solucion::setTamBusqueda(int tam)
+{
+	tam_busqueda = tam;
 }
 
 bool solucion::ordenProcesoPrioridad(const proceso &left, const proceso &right) const
@@ -256,12 +278,13 @@ int solucion::llenarSolucion(ifstream& fsol)
 
     //obteniendo espacio de las máquinas
     auxvi.clear();
-    for(im = maquinas->begin(); im != maquinas->end(); ++im)
+    /*for(im = maquinas->begin(); im != maquinas->end(); ++im)
     {
         espacio_disponible.push_back(im->getEspacioMaxVector());
-    }
+    }*/
 
     cout << "Preparando estructuras de datos" << endl;
+    uso_procesos.resize(maquinas_num, vector<int>(recursos_num, 0));
     servicio_maquina.resize(servicios_num, vector<bool>(maquinas_num, false));
     servicio_localizacion.resize(servicios_num, vector<int>(localizaciones_num, 0));
     servicio_vecindario.resize(servicios_num, vector<int>(vecindarios_num, 0));
@@ -278,10 +301,13 @@ int solucion::llenarSolucion(ifstream& fsol)
         //cada número es la máquina a la que está asignado un proceso (maq)
         asignacion_procesos.push_back(maq);
 
-        //restar al espacio disponible
+        //sumar al uso de recursos y restar al espacio disponible
         for (int r = 0; r < recursos_num; ++r)
         {
-        	espacio_disponible.at(maq).at(r) -= ip->getUsoRecursosVector().at(r);
+        	//sumar a uso procesos
+        	uso_procesos.at(maq).at(r) += ip->getUsoRecursosVector().at(r);
+        	//restar al espacio disponible
+        	//espacio_disponible.at(maq).at(r) -= ip->getUsoRecursosVector().at(r);
         }
 
         //servicio en la máquina
@@ -294,13 +320,26 @@ int solucion::llenarSolucion(ifstream& fsol)
         servicio_localizacion.at(srv).at(loc) += 1;
         servicio_vecindario.at(srv).at(vec) += 1;
 
-        //spread factor
-        spread_servicios.at(srv) += 1;
-
+        //spread factor de la localización
+        //spread_servicios.at(srv) += 1;
+    }
+    //rellenar el spread de los servicios (cant. localizaciones por servicio)
+    for (vector<servicio>::iterator is = servicios->begin(); is != servicios->end(); ++is)
+    {
+    	vector<int> procs = is->getListaProcesos();
+    	list<int> locs;
+    	for (auto ip = procs.begin(); ip != procs.end(); ++ip)
+    	{
+    		locs.push_back(maquinas->at(asignacion_procesos.at(*ip)).getLocation());
+    	}
+    	//quedarse sólo con los índices únicos
+    	locs.sort(); locs.unique();
+    	//guardar spread
+    	spread_servicios.at(is->getId()) = locs.size();
     }
 
     //Revisión
-    cout << "Vector de procesos vs máqunas:" << endl;
+    /*cout << "Vector de procesos vs máqunas:" << endl;
     for (int p = 0; p < procesos_num; ++p) cout << asignacion_procesos.at(p) << ' ';
     cout << endl;
     cout << "Espacio disponible por máquina:" << endl;
@@ -312,7 +351,7 @@ int solucion::llenarSolucion(ifstream& fsol)
             cout << espacio_disponible.at(m).at(r) << " ";
         }
         cout << endl;
-    }
+    }*/
     /*
     cout << "Matriz srv/maq:" << endl;
     for (int s = 0; s < servicios_num; ++s)
@@ -352,9 +391,12 @@ int solucion::llenarSolucion(ifstream& fsol)
     return 0;
 }
 
-//greedy
+//greedy (DISABLED)
 bool solucion::llenarSolucion()
 {
+	cout << "Greedy está deshabilitado" << endl << endl;
+	return false;
+
 	cout << "Preparando estructuras de datos" << endl;
 	asignacion_procesos.resize(procesos_num, -1);
 	servicio_maquina.resize(servicios_num, vector<bool>(maquinas_num, false));
@@ -376,7 +418,10 @@ bool solucion::llenarSolucion()
 
     //llenar matriz de espacio disponible en las máquinas
     maq_i = maquinas_sort.begin();
-    for(vector<maquina>::iterator im = maquinas->begin(); im != maquinas->end(); ++im)
+    //obtener uso de recursos transitivos: ese no cambia
+    uso_transitivo = sol_inicial->uso_transitivo;
+    //llenar espacio disponible
+    /*for(vector<maquina>::iterator im = maquinas->begin(); im != maquinas->end(); ++im)
     {
     	auxvec = im->getEspacioMaxVector();
         for(int r = 0; r < recursos_num; ++r)
@@ -389,7 +434,7 @@ bool solucion::llenarSolucion()
             	auxvec.at(r) = sol_inicial->espacio_disponible.at(im->getId()).at(r);
 
                 //hasta ahora, maquinas_sort está ordenado por id
-                //así que se puede acceder directamente (en teoría)
+                //así que se puede acceder directamente
                 maq_i->setCapacidadUtilizada(r, (maquinas->at(im->getId()).getEspacioMax(r) - auxvec.at(r)));
             }
         }
@@ -397,7 +442,7 @@ bool solucion::llenarSolucion()
         espacio_disponible.push_back(auxvec);
         //avanzar el iterador
         if (maq_i != maquinas_sort.end()) advance(maq_i, 1);
-    }
+    }*/
 
     cout << "Primer ordenamiento lista de máquinas" << endl;
 
@@ -470,7 +515,8 @@ bool solucion::llenarSolucion()
                 for(int r = 0; r < recursos_num; ++r)
                 {
                     //para cada recurso, ver si hay suficiente espacio en la máquina
-                    if(espacio_disponible.at(m_id).at(r) < procesos->at(p).getUsoRecursos(r))
+                    if(maquinas->at(m_id).getEspacioMax(r) - uso_procesos.at(m_id).at(r) - uso_transitivo.at(m_id).at(r)
+                    		< procesos->at(p).getUsoRecursos(r))
                     {
                         cout << "P" << p << " en M" << m_id << " rechazo por falta de recursos" << endl;
                         insert_ok = false;
@@ -520,8 +566,8 @@ bool solucion::llenarSolucion()
                     asignacion_procesos.at(p) = m_id;
 
                     //restar al espacio disponible, en estructura
-                    for (int r = 0; r < recursos_num; ++r)
-                        espacio_disponible.at(m_id).at(r) -= procesos->at(p).getUsoRecursos(r);
+                    //for (int r = 0; r < recursos_num; ++r)
+                    //    espacio_disponible.at(m_id).at(r) -= procesos->at(p).getUsoRecursos(r);
                     //y en máquina
                     maq_i->agregar_proceso(procesos->at(p));
 
@@ -591,7 +637,7 @@ bool solucion::llenarSolucion()
     }
 
     cout << "Fin del algoritmo greedy." << endl;
-    cout << endl << "Resumen de las estructuras de datos:" << endl;
+    /*cout << endl << "Resumen de las estructuras de datos:" << endl;
 
     cout << "Vector de procesos vs máqunas:" << endl;
 	for (int p = 0; p < procesos_num; ++p) cout << asignacion_procesos.at(p) << ' ';
@@ -605,7 +651,7 @@ bool solucion::llenarSolucion()
 			cout << espacio_disponible.at(m).at(r) << " ";
 		}
 		cout << endl;
-	}
+	}*/
 	/*
 	cout << "Matriz srv/maq:" << endl;
 	for (int s = 0; s < servicios_num; ++s)
@@ -635,13 +681,13 @@ bool solucion::llenarSolucion()
 		cout << endl;
 	}
 	*/
-	cout << "Spread de los servicios:" << endl;
+	/*cout << "Spread de los servicios:" << endl;
 	for (int s = 0; s < servicios_num; ++s)
 	{
 		cout << spread_servicios.at(s) << " ";
 	}
 	cout << endl << endl;
-
+	 */
     //true si están todos los procesos asignados, false si no se pudo agregar algo
     return insert_ok;
 }
@@ -650,10 +696,385 @@ void solucion::descartarGreedy()
 {
 	asignacion_procesos = sol_inicial->asignacion_procesos;
 	spread_servicios = sol_inicial->spread_servicios;
-	espacio_disponible = sol_inicial->espacio_disponible;
+	uso_procesos = sol_inicial->uso_procesos;
+	//uso_transitivo = sol_inicial->uso_transitivo;
+	//espacio_disponible = sol_inicial->espacio_disponible;
 	servicio_maquina = sol_inicial->servicio_maquina;
 	servicio_localizacion = sol_inicial->servicio_localizacion;
 	servicio_vecindario = sol_inicial->servicio_vecindario;
+}
+
+bool solucion::move()
+{
+	//variables
+	bool moved = false;
+	uniform_int_distribution<int> proc_dado(0, (procesos_num-1));
+	uniform_int_distribution<int> maq_dado(0, (maquinas_num-1));
+	//Dado
+	extern std::mt19937 generador;
+
+	//escoger un proceso proc en una máquina m0
+	int proc_id = proc_dado(generador);
+	int maq0_id = asignacion_procesos.at(proc_id);
+	int serv_id = procesos->at(proc_id).getServicio();
+	int spreadmin = servicios->at(serv_id).getSpreadmin();
+	vector<int> recursos_proc = procesos->at(proc_id).getUsoRecursosVector();
+	int loc0_id = maquinas->at(maq0_id).getLocation();
+	int vec0_id = maquinas->at(maq0_id).getNeighborhood();
+
+	//escoger máquina random maq, que no sea m0
+	int maq_id = maq_dado(generador);
+	while(maq_id == maq0_id) maq_id = maq_dado(generador);
+
+	//revisando maq y las tam_busqueda máqs siguientes
+	for(int m = maq_id; m < maquinas_num || m < (maq_id + tam_busqueda); ++m)
+	{
+		//si m es la máquina inicial, descartar
+		if (m == maq0_id) continue;
+
+		//revisar si proc cabe en m
+		bool entra = true;
+		for (int r = 0; r < recursos_num; ++r)
+		{
+			if(maquinas->at(m).getEspacioMax(r) - uso_procesos.at(m).at(r) - uso_transitivo.at(m).at(r)
+					< recursos_proc.at(r))
+				entra = false;
+		}
+		//revisar colisión de servicios
+		if (servicio_maquina.at(serv_id).at(m)) entra = false;
+
+		//si hay dramas de entrada, probar otra máquina
+		if (!entra) continue;
+
+		//revisar si proc puede salir de maq0
+		bool sale = true;
+		//si las máquinas son de distinta loc, revisar spreadmin
+		int loc_id = maquinas->at(m).getLocation();
+		if (loc0_id != loc_id)
+		{
+			if (spread_servicios.at(serv_id) <= spreadmin)
+				sale = false;
+		}
+
+		//estos son los servicios de los que depende serv_id
+		vector<int> dependencias = servicios->at(serv_id).getDependenciaVector();
+		//y estos son los servicios que dependen de serv_id
+		vector<int> dependientes = servicios->at(serv_id).getDependientes();
+		//si queda más de un proceso del servicio en el vecindario, puedo moverme
+		//si no hay procesos del servicio en el vecindario, algo anda muy mal
+		//si queda uno, tengo que asegurarme que donde lo mueva estén las dependencias
+		int vec_id = maquinas->at(m).getNeighborhood();
+		if (servicio_vecindario.at(serv_id).at(vec0_id) == 1)
+		{
+			//revisar todas las dependencias
+			for (auto idep = dependencias.begin(); idep != dependencias.end(); ++idep)
+			{
+				//si no hay procesos de la dependencia en el vecindario destino, fallar
+				if(servicio_vecindario.at(*idep).at(vec_id) <= 0)
+				{
+					sale = false;
+					break;
+				}
+			}
+
+			//revisar dependientes
+			for (auto idep = dependientes.begin(); idep != dependientes.end(); ++idep)
+			{
+				//si no hay procesos de los dependientes en el vecindario destino, fallar
+				//la alternativa (encadenar dependientes) no vale la pena intentarla
+				if(servicio_vecindario.at(*idep).at(vec_id) <= 0)
+				{
+					sale = false;
+					break;
+				}
+			}
+		}
+
+		//si hay dramas de salida, probar otra máquina
+		if (!sale) continue;
+
+		//seguimos acá, se puede entonces sacar el proceso de la maq0 y meterlo a m
+		//actualizar asignación, spread, espacio_disponible,
+		//servicio_maquina, servicio_loc, servicio_vec
+		if (entra && sale)
+		{
+			//cambiar uso de recursos
+			for (int r = 0; r < recursos_num; ++r)
+			{
+				//quitar recurso en maq0 y sumar recurso en m
+				uso_procesos.at(maq0_id).at(r) 	-= recursos_proc.at(r);
+				uso_procesos.at(m).at(r)		+= recursos_proc.at(r);
+
+				//si el recurso es transitivo, se revisa asignación inicial para saber qué hacer
+				if (recursos_trans->at(r))
+				{
+					//si la máquina origen es la de AI, el proceso sale de su AI: entra a uso transitivo
+					if (maq0_id == sol_inicial->asignacion_procesos.at(proc_id))
+					{
+						uso_transitivo.at(maq0_id).at(r) += recursos_proc.at(r);
+					}
+					//si la máquina destino es la de AI, el proceso vuelve: sale de uso transitivo
+					if (m == sol_inicial->asignacion_procesos.at(proc_id))
+					{
+						uso_transitivo.at(m).at(r) -= recursos_proc.at(r);
+					}
+				}
+
+			}
+			//cambiar asignación
+			asignacion_procesos.at(proc_id) = m;
+			//cambiar servicio_maquina
+			servicio_maquina.at(serv_id).at(maq0_id) = false;
+			servicio_maquina.at(serv_id).at(m) = true;
+			//cambiar servicio_loc y calcular spread (si es que hubo cambio de localización)
+			if (loc_id != loc0_id)
+			{
+				servicio_localizacion.at(serv_id).at(loc0_id) -= 1;
+				servicio_localizacion.at(serv_id).at(loc_id) += 1;
+				//recalcular spread: loc0 se quedó sin procesos de serv, luego bajó el spread del servicio
+				if (servicio_localizacion.at(serv_id).at(loc0_id) == 0)
+					spread_servicios.at(serv_id)--;
+				//recalcular spread: loc ahora tiene su primer proceso de serv, luego subió el spread del servicio
+				if (servicio_localizacion.at(serv_id).at(loc_id) == 1)
+					spread_servicios.at(serv_id)++;
+
+			}
+			//cambiar servicio_vec
+			if (vec_id != vec0_id)
+			{
+				servicio_vecindario.at(serv_id).at(vec0_id) -= 1;
+				servicio_vecindario.at(serv_id).at(vec_id) += 1;
+			}
+			//hecho el cambio, decidimos si se movió la cosa
+			//(evaluar en base a diferencia de coste)
+			moved = true;
+			break;
+		}//endif
+
+	}
+	//si se insertó algo, moved será true
+	//si no hubo movimiento, moved será false
+	return moved;
+}
+
+bool solucion::swap()
+{
+	//vars, dado
+	bool moved = false;
+	uniform_int_distribution<int> pizq_dado(0, (procesos_num-1));
+	uniform_int_distribution<int> pder_dado(0, (procesos_num-1));
+	extern std::mt19937 generador;
+
+	//escoger proceso p_izq en máq m_izq
+	int proc_izq = pizq_dado(generador);
+	int maq_izq = asignacion_procesos.at(proc_izq);
+	int serv_izq = procesos->at(proc_izq).getServicio();
+	int spmin_izq = servicios->at(serv_izq).getSpreadmin();
+	vector<int> rec_izq = procesos->at(proc_izq).getUsoRecursosVector();
+	int loc_izq = maquinas->at(maq_izq).getLocation();
+	int vec_izq = maquinas->at(maq_izq).getNeighborhood();
+
+	//escoger otro proceso p_der en máq m_der
+	//da igual que m_der = m_izq, eso se revisa en el loop de revisión
+	int p = pder_dado(generador);
+
+	//revisando si se puede hacer swap a los procesos (y a los tam_busqueda siguientes)
+	for(int proc_der = p; proc_der < procesos_num || proc_der < (p + tam_busqueda); ++proc_der)
+	{
+		//obtener máquina destino
+		int maq_der = asignacion_procesos.at(proc_der);
+		//si es la máquina de la izquierda, descartar proceso
+		if (maq_der == maq_izq) continue;
+
+		//condiciones de peso
+		bool rest_peso = true;
+		vector<int> rec_der = procesos->at(proc_der).getUsoRecursosVector();
+		for (int r = 0; r < recursos_num; ++r)
+		{
+			//revisar si rec_izq cabe en maq_der, eliminando rec_der:
+			//espacio máx en máq. derecha - uso procesos reg/trans en máq. derecha + espacio que deja el proceso saliente a la derecha
+			if (maquinas->at(maq_der).getEspacioMax(r) - uso_procesos.at(maq_der).at(r) - uso_transitivo.at(maq_der).at(r) + rec_der.at(r)
+					< rec_izq.at(r))
+			{
+				rest_peso = false;
+				break;
+			}
+			//revisar si rec_der cabe en maq_izq, eliminando rec_izq:
+			//espacio máx en máq. izquierda - uso procesos reg/trans en máq. izquierda + espacio que deja el proceso saliente a la izquierda
+			if (maquinas->at(maq_izq).getEspacioMax(r) - uso_procesos.at(maq_izq).at(r) - uso_transitivo.at(maq_der).at(r) + rec_izq.at(r)
+					< rec_der.at(r))
+			{
+				rest_peso = false;
+				break;
+			}
+		}
+		//si se pasa un peso, cambiar a otro proceso
+		if (!rest_peso) continue;
+
+		//revisar colisión de servicios cruzados
+		bool rest_servs = true;
+		int serv_der = procesos->at(proc_der).getServicio();
+		//si un par servicio/máquina ya existe, cambiar a otro proceso...
+		if (servicio_maquina.at(serv_izq).at(maq_der) || servicio_maquina.at(serv_der).at(maq_izq))
+		{
+			//a menos que los procesos sean del mismo servicio: si es así, pueden intercambiarse
+			if (serv_izq == serv_der) rest_servs = true;
+			else rest_servs = false;
+		}
+		if (!rest_servs) continue;
+
+		//revisar restricciones de spreadmin
+		bool rest_locs = true;
+		int loc_der = maquinas->at(maq_der).getLocation();
+		//si las dos máquinas son de distinta loc, revisar spreadmins
+		if (loc_izq != loc_der)
+		{
+			//servicio izquierda
+			if (spread_servicios.at(serv_izq) <= spmin_izq) rest_locs = false;
+			//servicio derecha
+			int spmin_der = servicios->at(serv_der).getSpreadmin();
+			if (spread_servicios.at(serv_der) <= spmin_der) rest_locs = false;
+		}
+		if (!rest_locs) continue;
+
+		//revisar restricciones de dependencia (oh dear)
+		bool vecs = true;
+		int vec_der = maquinas->at(maq_der).getNeighborhood();
+		//parte 1: resolver dependencias de serv_izq; destino: vec_der
+		vector<int> dependencias = servicios->at(serv_izq).getDependenciaVector();
+		vector<int> dependientes = servicios->at(serv_izq).getDependientes();
+		//si queda un proceso de serv_izq en vec_izq, revisar
+		if (servicio_vecindario.at(serv_izq).at(vec_izq) == 1)
+		{
+			//todas las dependencias y dependientes
+			for (auto idep = dependencias.begin(); idep != dependencias.end(); ++idep)
+			{
+				if(servicio_vecindario.at(*idep).at(vec_der) <= 0)
+				{
+					vecs = false;
+					break;
+				}
+			}
+			for (auto idep = dependientes.begin(); idep != dependientes.end(); ++idep)
+			{
+				if(servicio_vecindario.at(*idep).at(vec_der) <= 0)
+				{
+					vecs = false;
+					break;
+				}
+			}
+		}
+		if (!vecs) continue;
+		//parte 2: resolver dependencias de serv_der; destino: vec_izq
+		dependencias = servicios->at(serv_der).getDependenciaVector();
+		dependientes = servicios->at(serv_der).getDependientes();
+		if (servicio_vecindario.at(serv_der).at(vec_der) == 1)
+		{
+			//todas las dependencias y dependientes
+			for (auto idep = dependencias.begin(); idep != dependencias.end(); ++idep)
+			{
+				if(servicio_vecindario.at(*idep).at(vec_izq) <= 0)
+				{
+					vecs = false;
+					break;
+				}
+			}
+			for (auto idep = dependientes.begin(); idep != dependientes.end(); ++idep)
+			{
+				if(servicio_vecindario.at(*idep).at(vec_izq) <= 0)
+				{
+					vecs = false;
+					break;
+				}
+			}
+		}
+		if (!vecs) continue;
+
+		//si llegamos hasta acá, realizar el swap
+		//actualizar asignación, spread, espacio_disponible,
+		//servicio_maquina, servicio_loc, servicio_vec
+
+		//cambiar uso de recursos
+		for (int r = 0; r < recursos_num; ++r)
+		{
+			//quitar recursos en las máquinas origen (same)
+			uso_procesos.at(maq_izq).at(r)	-= rec_izq.at(r);
+			uso_procesos.at(maq_der).at(r)	-= rec_der.at(r);
+			//agregar recursos en las máquinas destino (swap)
+			uso_procesos.at(maq_izq).at(r)	+= rec_der.at(r);
+			uso_procesos.at(maq_der).at(r)	+= rec_izq.at(r);
+
+			//manejo de recursos transitivos
+			if (recursos_trans->at(r))
+			{
+				//proc_izq: revisar máquina origen/destino (same/swap)
+				if (maq_izq == sol_inicial->asignacion_procesos.at(proc_izq))
+					uso_transitivo.at(maq_izq).at(r) += rec_izq.at(r);
+				if (maq_der == sol_inicial->asignacion_procesos.at(proc_izq))
+					uso_transitivo.at(maq_der).at(r) -= rec_izq.at(r);
+				//proc_der: same as previous
+				if (maq_der == sol_inicial->asignacion_procesos.at(proc_der))
+					uso_transitivo.at(maq_der).at(r) += rec_der.at(r);
+				if (maq_izq == sol_inicial->asignacion_procesos.at(proc_der))
+					uso_transitivo.at(maq_izq).at(r) -= rec_der.at(r);
+			}
+		}
+
+		//cambio de asignación (swap)
+		asignacion_procesos.at(proc_izq) = maq_der;
+		asignacion_procesos.at(proc_der) = maq_izq;
+		//servicio_maquina para serv_izq
+		servicio_maquina.at(serv_izq).at(maq_izq) = false;
+		servicio_maquina.at(serv_izq).at(maq_der) = true;
+		//servicio_maquina para serv_der
+		servicio_maquina.at(serv_der).at(maq_der) = false;
+		servicio_maquina.at(serv_der).at(maq_izq) = true;
+
+		//actualizar servicio_loc
+		if (loc_izq != loc_der)
+		{
+			//loc_izq
+			servicio_localizacion.at(serv_izq).at(loc_izq) -= 1;
+			servicio_localizacion.at(serv_izq).at(loc_der) += 1;
+			//loc_der
+			servicio_localizacion.at(serv_der).at(loc_der) -= 1;
+			servicio_localizacion.at(serv_der).at(loc_izq) += 1;
+			//recalcular spread para serv_izq
+			if (servicio_localizacion.at(serv_izq).at(loc_izq) == 0)
+				spread_servicios.at(serv_izq)--;
+			if (servicio_localizacion.at(serv_izq).at(loc_der) == 1)
+				spread_servicios.at(serv_izq)++;
+			//recalcular spread para serv_der
+			if (servicio_localizacion.at(serv_der).at(loc_der) == 0)
+				spread_servicios.at(serv_der)--;
+			if (servicio_localizacion.at(serv_der).at(loc_izq) == 1)
+				spread_servicios.at(serv_der)++;
+		}
+
+		//actualizar servicio_vec
+		if (vec_izq != vec_der)
+		{
+			servicio_vecindario.at(serv_izq).at(vec_izq) -=1;
+			servicio_vecindario.at(serv_izq).at(vec_der) +=1;
+			servicio_vecindario.at(serv_der).at(vec_der) -=1;
+			servicio_vecindario.at(serv_der).at(vec_izq) +=1;
+		}
+		//movimiento válido
+		moved = true;
+		break;
+
+	}//endfor(revisión de procesos)
+
+	//Revisión de costes
+	if (moved)
+	{
+		int costo_sol_anterior = costo_solucion;
+		calcularCostoSolucion();
+		//calcular diferencia, tirar dado, etc
+
+	}
+
+	return moved;
 }
 
 
