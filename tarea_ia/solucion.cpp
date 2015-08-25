@@ -726,6 +726,10 @@ bool solucion::move()
 	int maq_id = maq_dado(generador);
 	while(maq_id == maq0_id) maq_id = maq_dado(generador);
 
+
+	//parámetros para rollback
+	int rbm, rbloc_id, rbvec_id;
+
 	//revisando maq y las tam_busqueda máqs siguientes
 	for(int m = maq_id; m < maquinas_num || m < (maq_id + tam_busqueda); ++m)
 	{
@@ -846,12 +850,78 @@ bool solucion::move()
 				servicio_vecindario.at(serv_id).at(vec_id) += 1;
 			}
 			//hecho el cambio, decidimos si se movió la cosa
-			//(evaluar en base a diferencia de coste)
+			rbm = m;
+			rbloc_id = loc_id;
+			rbvec_id = vec_id;
 			moved = true;
 			break;
 		}//endif
+	}//endfor?
 
+	//Revisión de costes y tirada de dado
+	if (moved)
+	{
+		int costo_sol_anterior = costo_solucion;
+		calcularCostoSolucion();
+		//calcular diferencia
+		int delta = costo_sol_anterior - costo_solucion;
+		//si costo_solucion menor que costo_sol_anterior, quedarse
+		if (delta > 0) return true;
+		//si no, dado
+		uniform_real_distribution<double> exp_dado(0, 1);
+		double exp_eval = exp(delta/temperatura);
+		//tirar dado
+		if (exp_eval < exp_dado(generador)) moved = true;
+		else
+		{
+			//rollback
+			for (int r = 0; r < recursos_num; ++r)
+			{
+				uso_procesos.at(rbm).at(r) -= recursos_proc.at(r);
+				uso_procesos.at(maq0_id).at(r) -= recursos_proc.at(r);
+
+				if (recursos_trans->at(r))
+				{
+					//si la máquina origen es la de AI, el proceso sale de su AI: entra a uso transitivo
+					if (rbm == sol_inicial->asignacion_procesos.at(proc_id))
+					{
+						uso_transitivo.at(rbm).at(r) += recursos_proc.at(r);
+					}
+					//si la máquina destino es la de AI, el proceso vuelve: sale de uso transitivo
+					if (maq0_id == sol_inicial->asignacion_procesos.at(proc_id))
+					{
+						uso_transitivo.at(maq0_id).at(r) -= recursos_proc.at(r);
+					}
+				}
+			}
+			asignacion_procesos.at(proc_id) = maq0_id;
+
+			servicio_maquina.at(serv_id).at(rbm) = false;
+			servicio_maquina.at(serv_id).at(maq0_id) = true;
+
+			if (rbloc_id != loc0_id)
+			{
+				servicio_localizacion.at(serv_id).at(rbloc_id) -= 1;
+				servicio_localizacion.at(serv_id).at(loc0_id) += 1;
+				//recalcular spread: loc0 se quedó sin procesos de serv, luego bajó el spread del servicio
+				if (servicio_localizacion.at(serv_id).at(rbloc_id) == 0)
+					spread_servicios.at(serv_id)--;
+				//recalcular spread: loc ahora tiene su primer proceso de serv, luego subió el spread del servicio
+				if (servicio_localizacion.at(serv_id).at(loc0_id) == 1)
+					spread_servicios.at(serv_id)++;
+
+			}
+			//cambiar servicio_vec
+			if (rbvec_id != vec0_id)
+			{
+				servicio_vecindario.at(serv_id).at(rbvec_id) -= 1;
+				servicio_vecindario.at(serv_id).at(vec0_id) += 1;
+			}
+			moved = false;
+			calcularCostoSolucion();
+		}
 	}
+
 	//si se insertó algo, moved será true
 	//si no hubo movimiento, moved será false
 	return moved;
@@ -877,6 +947,10 @@ bool solucion::swap()
 	//escoger otro proceso p_der en máq m_der
 	//da igual que m_der = m_izq, eso se revisa en el loop de revisión
 	int p = pder_dado(generador);
+
+	//variables para hacer undo
+	int uproc_der, umaq_der, userv_der, uloc_der, uvec_der;
+	vector<int> urec_der;
 
 	//revisando si se puede hacer swap a los procesos (y a los tam_busqueda siguientes)
 	for(int proc_der = p; proc_der < procesos_num || proc_der < (p + tam_busqueda); ++proc_der)
@@ -994,6 +1068,15 @@ bool solucion::swap()
 		//actualizar asignación, spread, espacio_disponible,
 		//servicio_maquina, servicio_loc, servicio_vec
 
+		//anotar variables para undo
+		uproc_der = proc_der;
+		umaq_der = maq_der;
+		userv_der = serv_der;
+		uloc_der = loc_der;
+		uvec_der = vec_der;
+		urec_der = rec_der;
+
+
 		//cambiar uso de recursos
 		for (int r = 0; r < recursos_num; ++r)
 		{
@@ -1065,15 +1148,106 @@ bool solucion::swap()
 
 	}//endfor(revisión de procesos)
 
-	//Revisión de costes
+	//Revisión de costes y tirada de dado
 	if (moved)
 	{
 		int costo_sol_anterior = costo_solucion;
 		calcularCostoSolucion();
 		//calcular diferencia, tirar dado, etc
+		int delta = costo_sol_anterior - costo_solucion;
+		//si costo_solucion es menor que la anterior, la solución pasa
+		if (delta > 0) return true;
+		//si no, tirar un dado
+		uniform_real_distribution<double> exp_dado(0, 1);
+		double exp_eval = exp(delta/temperatura);
+		//tirar dado (revisar si esto es cierto!!)
+		//si pasa, nos quedamos con empeorar la solución
+		if (exp_eval < exp_dado(generador)) moved = true;
+		//si no pasa, hacer el rollback
+		else
+		{
+			//rollback:
+			//dentro de este scope, *_izq será rb*_der
+			//y *_der será rb*_izq
+			int rbproc_izq = uproc_der;			int rbproc_der = proc_izq;
+			int rbmaq_izq = umaq_der;			int rbmaq_der = maq_izq;
+			int rbserv_izq = userv_der;			int rbserv_der = serv_izq;
+			int rbloc_izq = uloc_der;			int rbloc_der = loc_izq;
+			int rbvec_izq = uvec_der;			int rbvec_der = vec_izq;
+			vector<int> rbrec_izq = urec_der;	vector<int> rbrec_der = rec_izq;
 
+			//ejecutar los mismos movimientos para el swap
+			//cambiar uso de recursos
+			for (int r = 0; r < recursos_num; ++r)
+			{
+				//quitar recursos en las máquinas origen (same)
+				uso_procesos.at(rbmaq_izq).at(r)	-= rbrec_izq.at(r);
+				uso_procesos.at(rbmaq_der).at(r)	-= rbrec_der.at(r);
+				//agregar recursos en las máquinas destino (swap)
+				uso_procesos.at(rbmaq_izq).at(r)	+= rbrec_der.at(r);
+				uso_procesos.at(rbmaq_der).at(r)	+= rbrec_izq.at(r);
+
+				//manejo de recursos transitivos
+				if (recursos_trans->at(r))
+				{
+					//proc_izq: revisar máquina origen/destino (same/swap)
+					if (rbmaq_izq == sol_inicial->asignacion_procesos.at(rbproc_izq))
+						uso_transitivo.at(rbmaq_izq).at(r) += rbrec_izq.at(r);
+					if (rbmaq_der == sol_inicial->asignacion_procesos.at(rbproc_izq))
+						uso_transitivo.at(rbmaq_der).at(r) -= rbrec_izq.at(r);
+					//proc_der: same as previous
+					if (rbmaq_der == sol_inicial->asignacion_procesos.at(rbproc_der))
+						uso_transitivo.at(rbmaq_der).at(r) += rbrec_der.at(r);
+					if (rbmaq_izq == sol_inicial->asignacion_procesos.at(rbproc_der))
+						uso_transitivo.at(rbmaq_izq).at(r) -= rbrec_der.at(r);
+				}
+			}
+
+			//cambio de asignación (swap)
+			asignacion_procesos.at(rbproc_izq) = rbmaq_der;
+			asignacion_procesos.at(rbproc_der) = rbmaq_izq;
+			//servicio_maquina para serv_izq
+			servicio_maquina.at(rbserv_izq).at(rbmaq_izq) = false;
+			servicio_maquina.at(rbserv_izq).at(rbmaq_der) = true;
+			//servicio_maquina para serv_der
+			servicio_maquina.at(rbserv_der).at(rbmaq_der) = false;
+			servicio_maquina.at(rbserv_der).at(rbmaq_izq) = true;
+
+			//actualizar servicio_loc
+			if (rbloc_izq != rbloc_der)
+			{
+				//loc_izq
+				servicio_localizacion.at(rbserv_izq).at(rbloc_izq) -= 1;
+				servicio_localizacion.at(rbserv_izq).at(rbloc_der) += 1;
+				//loc_der
+				servicio_localizacion.at(rbserv_der).at(rbloc_der) -= 1;
+				servicio_localizacion.at(rbserv_der).at(rbloc_izq) += 1;
+				//recalcular spread para serv_izq
+				if (servicio_localizacion.at(rbserv_izq).at(rbloc_izq) == 0)
+					spread_servicios.at(rbserv_izq)--;
+				if (servicio_localizacion.at(rbserv_izq).at(rbloc_der) == 1)
+					spread_servicios.at(rbserv_izq)++;
+				//recalcular spread para serv_der
+				if (servicio_localizacion.at(rbserv_der).at(rbloc_der) == 0)
+					spread_servicios.at(rbserv_der)--;
+				if (servicio_localizacion.at(rbserv_der).at(rbloc_izq) == 1)
+					spread_servicios.at(rbserv_der)++;
+			}
+
+			//actualizar servicio_vec
+			if (rbvec_izq != rbvec_der)
+			{
+				servicio_vecindario.at(rbserv_izq).at(rbvec_izq) -=1;
+				servicio_vecindario.at(rbserv_izq).at(rbvec_der) +=1;
+				servicio_vecindario.at(rbserv_der).at(rbvec_der) -=1;
+				servicio_vecindario.at(rbserv_der).at(rbvec_izq) +=1;
+			}
+
+			//y la weá no se movió po
+			moved = false;
+			calcularCostoSolucion();
+		}
 	}
-
 	return moved;
 }
 

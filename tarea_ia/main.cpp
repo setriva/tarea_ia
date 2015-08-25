@@ -589,7 +589,10 @@ int main(int argc, char **argv)
     		}
     	}
     	//si no hay movimientos, se aumenta el contador de movimientos rechazados
-    	else iter_mov_rechazado++;
+    	else
+		{
+    		iter_mov_rechazado++;
+		}
 
     	//bajar temperatura (enfriamiento geométrico)
     	if (iter_loop > iteraciones_temperatura)
