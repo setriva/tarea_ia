@@ -728,10 +728,13 @@ bool solucion::move()
 
 
 	//parámetros para rollback
-	int rbm, rbloc_id, rbvec_id;
+	//int rbm, rbloc_id, rbvec_id;
+	vector<vector<int>> rbuso_procesos, rbserv_localizacion, rbserv_vecindario;
+	vector<vector<bool>> rbserv_maquina;
+	vector<int> rbasign_procesos;
 
 	//revisando maq y las tam_busqueda máqs siguientes
-	for(int m = maq_id; m < maquinas_num || m < (maq_id + tam_busqueda); ++m)
+	for(int m = maq_id; m < maquinas_num && m < (maq_id + tam_busqueda); ++m)
 	{
 		//si m es la máquina inicial, descartar
 		if (m == maq0_id) continue;
@@ -740,9 +743,12 @@ bool solucion::move()
 		bool entra = true;
 		for (int r = 0; r < recursos_num; ++r)
 		{
-			if(maquinas->at(m).getEspacioMax(r) - uso_procesos.at(m).at(r) - uso_transitivo.at(m).at(r)
-					< recursos_proc.at(r))
-				entra = false;
+			int espacioMax = maquinas->at(m).getEspacioMax(r);
+			int usoProcesos = uso_procesos.at(m).at(r);
+			int usoTransitivo = uso_transitivo.at(m).at(r);
+			int recursoProc = recursos_proc.at(r);
+
+			if((espacioMax - usoProcesos - usoTransitivo) < recursoProc) entra = false;
 		}
 		//revisar colisión de servicios
 		if (servicio_maquina.at(serv_id).at(m)) entra = false;
@@ -802,12 +808,27 @@ bool solucion::move()
 		//servicio_maquina, servicio_loc, servicio_vec
 		if (entra && sale)
 		{
+			//sacar copia de las matrices
+			rbuso_procesos = uso_procesos;
+			rbasign_procesos = asignacion_procesos;
+			rbserv_maquina = servicio_maquina;
+			rbserv_localizacion = servicio_localizacion;
+			rbserv_vecindario = servicio_vecindario;
+
 			//cambiar uso de recursos
 			for (int r = 0; r < recursos_num; ++r)
 			{
 				//quitar recurso en maq0 y sumar recurso en m
 				uso_procesos.at(maq0_id).at(r) 	-= recursos_proc.at(r);
 				uso_procesos.at(m).at(r)		+= recursos_proc.at(r);
+
+				//insanity check
+				if (uso_procesos.at(maq0_id).at(r) < 0 ||
+					uso_procesos.at(m).at(r) > maquinas->at(m).getEspacioMax(r))
+				{
+					cout << "USO DE PROCESOS MENOR A CERO O SOBREPASO DE ESPACIO EN MAQUINA" << endl;
+					return false;
+				}
 
 				//si el recurso es transitivo, se revisa asignación inicial para saber qué hacer
 				if (recursos_trans->at(r))
@@ -850,9 +871,9 @@ bool solucion::move()
 				servicio_vecindario.at(serv_id).at(vec_id) += 1;
 			}
 			//hecho el cambio, decidimos si se movió la cosa
-			rbm = m;
-			rbloc_id = loc_id;
-			rbvec_id = vec_id;
+			//rbm = m;
+			//rbloc_id = loc_id;
+			//rbvec_id = vec_id;
 			moved = true;
 			break;
 		}//endif
@@ -871,10 +892,15 @@ bool solucion::move()
 		uniform_real_distribution<double> exp_dado(0, 1);
 		double exp_eval = exp(delta/temperatura);
 		//tirar dado
-		if (exp_eval < exp_dado(generador)) moved = true;
+		double exp_exec_dado = exp_dado(generador);
+		if (exp_exec_dado < exp_eval)
+		{
+			moved = true;
+		}
 		else
 		{
 			//rollback
+			/*
 			for (int r = 0; r < recursos_num; ++r)
 			{
 				uso_procesos.at(rbm).at(r) -= recursos_proc.at(r);
@@ -916,7 +942,14 @@ bool solucion::move()
 			{
 				servicio_vecindario.at(serv_id).at(rbvec_id) -= 1;
 				servicio_vecindario.at(serv_id).at(vec0_id) += 1;
-			}
+			}*/
+
+			//restaurar
+			uso_procesos = rbuso_procesos;
+			asignacion_procesos = rbasign_procesos;
+			servicio_maquina = rbserv_maquina;
+			servicio_localizacion = rbserv_localizacion;
+			servicio_vecindario = rbserv_vecindario;
 			moved = false;
 			calcularCostoSolucion();
 		}
@@ -949,11 +982,14 @@ bool solucion::swap()
 	int p = pder_dado(generador);
 
 	//variables para hacer undo
-	int uproc_der, umaq_der, userv_der, uloc_der, uvec_der;
-	vector<int> urec_der;
+	//int uproc_der, umaq_der, userv_der, uloc_der, uvec_der;
+	//vector<int> urec_der;
+	vector<vector<int>> rbuso_procesos, rbserv_localizacion, rbserv_vecindario;
+	vector<vector<bool>> rbserv_maquina;
+	vector<int> rbasign_procesos;
 
 	//revisando si se puede hacer swap a los procesos (y a los tam_busqueda siguientes)
-	for(int proc_der = p; proc_der < procesos_num || proc_der < (p + tam_busqueda); ++proc_der)
+	for(int proc_der = p; proc_der < procesos_num && proc_der < (p + tam_busqueda); ++proc_der)
 	{
 		//obtener máquina destino
 		int maq_der = asignacion_procesos.at(proc_der);
@@ -965,18 +1001,27 @@ bool solucion::swap()
 		vector<int> rec_der = procesos->at(proc_der).getUsoRecursosVector();
 		for (int r = 0; r < recursos_num; ++r)
 		{
+			int maxEspacioIzq = maquinas->at(maq_izq).getEspacioMax(r);
+			int maxEspacioDer = maquinas->at(maq_der).getEspacioMax(r);
+			int usoProcesosIzq = uso_procesos.at(maq_izq).at(r);
+			int usoProcesosDer = uso_procesos.at(maq_der).at(r);
+			int usoTransitivoIzq = uso_transitivo.at(maq_izq).at(r);
+			int usoTransitivoDer = uso_transitivo.at(maq_der).at(r);
+			int recursoIzq = rec_izq.at(r);
+			int recursoDer = rec_der.at(r);
+
 			//revisar si rec_izq cabe en maq_der, eliminando rec_der:
 			//espacio máx en máq. derecha - uso procesos reg/trans en máq. derecha + espacio que deja el proceso saliente a la derecha
-			if (maquinas->at(maq_der).getEspacioMax(r) - uso_procesos.at(maq_der).at(r) - uso_transitivo.at(maq_der).at(r) + rec_der.at(r)
-					< rec_izq.at(r))
+			int espacioDisponibleDer = maxEspacioDer - usoProcesosDer - usoTransitivoDer;
+			if (espacioDisponibleDer + recursoDer < recursoIzq)
 			{
 				rest_peso = false;
 				break;
 			}
 			//revisar si rec_der cabe en maq_izq, eliminando rec_izq:
 			//espacio máx en máq. izquierda - uso procesos reg/trans en máq. izquierda + espacio que deja el proceso saliente a la izquierda
-			if (maquinas->at(maq_izq).getEspacioMax(r) - uso_procesos.at(maq_izq).at(r) - uso_transitivo.at(maq_der).at(r) + rec_izq.at(r)
-					< rec_der.at(r))
+			int espacioDisponibleIzq = maxEspacioIzq - usoProcesosIzq - usoTransitivoIzq;
+			if (espacioDisponibleIzq + recursoIzq < recursoDer)
 			{
 				rest_peso = false;
 				break;
@@ -1069,12 +1114,11 @@ bool solucion::swap()
 		//servicio_maquina, servicio_loc, servicio_vec
 
 		//anotar variables para undo
-		uproc_der = proc_der;
-		umaq_der = maq_der;
-		userv_der = serv_der;
-		uloc_der = loc_der;
-		uvec_der = vec_der;
-		urec_der = rec_der;
+		rbuso_procesos = uso_procesos;
+		rbasign_procesos = asignacion_procesos;
+		rbserv_maquina = servicio_maquina;
+		rbserv_localizacion = servicio_localizacion;
+		rbserv_vecindario = servicio_vecindario;
 
 
 		//cambiar uso de recursos
@@ -1162,11 +1206,12 @@ bool solucion::swap()
 		double exp_eval = exp(delta/temperatura);
 		//tirar dado (revisar si esto es cierto!!)
 		//si pasa, nos quedamos con empeorar la solución
-		if (exp_eval < exp_dado(generador)) moved = true;
+		if (exp_eval > exp_dado(generador)) moved = true;
 		//si no pasa, hacer el rollback
 		else
 		{
 			//rollback:
+			/*
 			//dentro de este scope, *_izq será rb*_der
 			//y *_der será rb*_izq
 			int rbproc_izq = uproc_der;			int rbproc_der = proc_izq;
@@ -1242,8 +1287,14 @@ bool solucion::swap()
 				servicio_vecindario.at(rbserv_der).at(rbvec_der) -=1;
 				servicio_vecindario.at(rbserv_der).at(rbvec_izq) +=1;
 			}
+			*/
 
-			//y la weá no se movió po
+			//restaurar
+			uso_procesos = rbuso_procesos;
+			asignacion_procesos = rbasign_procesos;
+			servicio_maquina = rbserv_maquina;
+			servicio_localizacion = rbserv_localizacion;
+			servicio_vecindario = rbserv_vecindario;
 			moved = false;
 			calcularCostoSolucion();
 		}

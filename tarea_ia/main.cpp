@@ -553,17 +553,21 @@ int main(int argc, char **argv)
     //Que empiecen los juegos del hambre
     cout << endl << "Iniciando algoritmo SA." << endl;
 
+    sol_nueva.calcularCostoSolucion();
     //Variables de loop SA
     bool terminar = false;								//salir de la ejecución
     bool movimiento = false;							//se ejecutó el movimiento?
     auto inicio_loop = high_resolution_clock::now();	//momento en que inicia la ejecución del loop
     uniform_real_distribution<float> dado(0.0f, 1.0f);	//tirada de dado (distribución uniforme)
-    sol_fitness = numeric_limits<long>::max();			//worst fitness ever (hay que minimizarlo)
+    sol_fitness = sol_nueva.getCostoSolucion();			//fitness de la solución inicial (a minimizar)
     int iter_loop = 0;									//iteraciones realizadas
     int iter_fitness_const = 0;							//iteraciones con fitness no cambiado
     int iter_mov_rechazado = 0;							//iteraciones sin movimientos posibles
     long double temperatura = temperatura_inicial; 		//temperatura para trabajar
     sol_nueva.setTemperatura(temperatura);
+    sol_nueva.setTamBusqueda(tam_busqueda);
+
+    cout << "Fitness inicial: " << sol_fitness << endl;
 
     //Loop de SA
     while(!terminar)
@@ -574,6 +578,8 @@ int main(int argc, char **argv)
     	else
     		movimiento = sol_nueva.swap();
 
+    	//movimiento = sol_nueva.move();
+
     	//actualización de iteradores
     	iter_loop++;
     	iter_fitness_const++;
@@ -583,6 +589,7 @@ int main(int argc, char **argv)
     	{
     		if(sol_fitness > sol_nueva.getCostoSolucion())
     		{
+    			cout << "Solución nueva mejora fitness: " << sol_nueva.getCostoSolucion() << endl;
     			sol_fitness = sol_nueva.getCostoSolucion();
     			sol_best = sol_nueva.getAsignacion();
     			iter_fitness_const = 0;
@@ -597,8 +604,10 @@ int main(int argc, char **argv)
     	//bajar temperatura (enfriamiento geométrico)
     	if (iter_loop > iteraciones_temperatura)
     	{
-    		temperatura = temperatura * exp(ratio_enfriamiento);
+    		cout << iter_loop << " iteraciones: se baja temperatura de " << temperatura;
+    		temperatura = temperatura * exp(-ratio_enfriamiento);
     		sol_nueva.setTemperatura(temperatura);
+    		cout << " a " << temperatura << endl;
 
     		//resetear contadores
     		iter_loop = 0;
@@ -612,10 +621,12 @@ int main(int argc, char **argv)
     		//los movimientos rechazados son el 99.9% del total
     		if (((double)iter_mov_rechazado / (double)iter_loop) >= 0.999)
     		{
+    			cout << "No mejora solución en " << iter_fitness_const << endl;
+    			cout << "Recalentando temperatura de " << temperatura;
     			//frozen SA, recalentar
     			temperatura += (temperatura/100);
     			sol_nueva.setTemperatura(temperatura);
-
+    			cout << " a " << temperatura;
     			//resetear contadores
     			iter_loop = 0;
     			iter_mov_rechazado = 0;
@@ -626,8 +637,17 @@ int main(int argc, char **argv)
     	//revisar si ya pasó el tiempo
     	if (duration_cast<seconds>(high_resolution_clock::now() - inicio_loop) >= tiempo_limite)
     	{
+    		cout << "Se acabó el tiempo." << endl;
     		terminar = true;
     	}
+    }
+    ofstream sol_best_out(file_salida);
+
+    cout << "Asignación final: " << endl;
+    for (int p = 0; p < procesos_num; ++p)
+    {
+    	cout << sol_best.at(p) << ' ';
+    	sol_best_out << sol_best.at(p) << ' ';
     }
 
     cout.rdbuf(coutbuf);
