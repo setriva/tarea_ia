@@ -24,7 +24,7 @@ using namespace std::chrono;
 
 //mejor solución
 static vector<int> sol_best;		//mejor asignación de procesos
-static long sol_fitness;			//fitness de la mejor asignación
+static long long sol_fitness;			//fitness de la mejor asignación
 
 //generador
 std::mt19937 generador;
@@ -112,7 +112,6 @@ int main(int argc, char **argv)
     int tam_busqueda = 50;
     float ratio_enfriamiento = 0.97f;
     float chance_move = 0.7f;
-    string file_salida = "output.txt";
 
     //Texto de ayuda
     if (argc < 2)
@@ -147,10 +146,14 @@ int main(int argc, char **argv)
     streambuf* coutbuf = cout.rdbuf();
     cout.rdbuf(log.rdbuf());
 
+    string file_salida;
+    file_salida.append("output_");
+    file_salida.append(buffer);
+    file_salida.append(".txt");
+
     //Interrumpir mediante ctrl+c
-    //void (*prev_handler)(int);
-    //prev_handler =
-    signal(SIGINT, interrumpir);
+    void (*prev_handler)(int);
+    prev_handler = signal(SIGINT, interrumpir);
 
     //Abrir instancia
     if (!cmdOptionExists(argv, argv+argc, "-p"))
@@ -622,11 +625,11 @@ int main(int argc, char **argv)
     		if (((double)iter_mov_rechazado / (double)iter_loop) >= 0.999)
     		{
     			cout << "No mejora solución en " << iter_fitness_const << endl;
-    			cout << "Recalentando temperatura de " << temperatura;
+    			cout << "Recalentando temperatura desde " << temperatura;
     			//frozen SA, recalentar
-    			temperatura += (temperatura/100);
+    			temperatura += (temperatura_inicial/100);
     			sol_nueva.setTemperatura(temperatura);
-    			cout << " a " << temperatura;
+    			cout << " hasta " << temperatura << endl;
     			//resetear contadores
     			iter_loop = 0;
     			iter_mov_rechazado = 0;

@@ -86,58 +86,55 @@ void solucion::calcularCostoSolucion()
     costo_solucion = 0;
 
     //Temps
-    int costo_carga = 0;
-    int costo_balance = 0;
-    int costo_movproceso = 0;
-    int costo_movservicio = 0;
-    int costo_movmaquina = 0;
+    long long costo_carga = 0;
+    long long costo_balance = 0;
+    long long costo_movproceso = 0;
+    long long costo_movservicio = 0;
+    long long costo_movmaquina = 0;
 
     //Costo de carga: cuánto se pasa la máquina de su safety cost
     //recordar ponderar por cada recurso
 
-    vector<int> exceso_carga(recursos_num);	//exceso TOTAL de carga
-    vector<int> uvec(recursos_num);	//espacio utilizado
     vector<int> svec(recursos_num);	//capacidad de seguridad
-    vector<int> exc(recursos_num);	//espacio máximo
-    int bal, r1, r2, ratio;			//parámetros de balanceo
+    vector<long long> uso(recursos_num, 0); //espacio utilizado
+    long long exc; //exceso de uso del recurso
+
+    long bal;
+    int r1, r2, ratio;			//parámetros de balanceo
     for (vector<maquina>::iterator im = maquinas->begin(); im != maquinas->end(); ++im)
     {
     	//cálculo del costo de carga
-    	//uvec = im->getEspacioMaxVector();
     	svec = im->getEspacioSafeVector();
     	for (int r = 0; r < recursos_num; ++r)
     	{
     		//sumar uso recursos
-    		uvec.at(r) = uso_procesos.at(im->getId()).at(r);
+    		uso.at(r) = (long long)uso_procesos.at(im->getId()).at(r);
     		//sumar transitivos
-    		uvec.at(r) += uso_transitivo.at(im->getId()).at(r);
+    		uso.at(r) += (long long)uso_transitivo.at(im->getId()).at(r);
     		//restar espacio utilizado y capacidad segura
-    		exc.at(r) = uvec.at(r) - svec.at(r);
+    		exc = uso.at(r) - (long long)svec.at(r);
     		//si es menor a 0, que sea 0
-    		if (exc.at(r) < 0) exc.at(r) = 0;
-    		//agregar al exceso de carga
-    		exceso_carga.at(r) += exc.at(r);
+    		if (exc < 0) exc = 0;
+    		//agregar al costo de carga, ponderado
+    		costo_carga += (long long)peso_recursos->at(r) * exc;
     	}
 
     	//cálculo del costo de balance
-    	//cuánto se pasa el recurso R2 de ratio veces el recurso R1
+    	//cuánto se pasa el espacio disponible de R2 de ratio veces el espacio disponible de R1
     	for (int b = 0; b < balances_num; ++b)
     	{
     		//leer trío de balance
     		r1 = balances->at(b).at(0);
     		r2 = balances->at(b).at(1);
     		ratio = balances->at(b).at(2);
+
     		//calcular balance
-    		bal = ((uvec.at(r1) * ratio) - uvec.at(r2));
+    		bal = ((im->getEspacioMax(r1) - uso.at(r1)) * ratio) - (im->getEspacioMax(r2) - uso.at(r2));
+    		//si es menor a 0, que sea 0
+    		if (bal < 0) bal = 0;
     		//sumar ponderado
     		costo_balance += (balances->at(b).at(3) * bal);
     	}
-    }
-
-    //ponderar costo de carga
-    for (int r = 0; r < recursos_num; ++r)
-    {
-    	costo_carga += (exceso_carga.at(r) * peso_recursos->at(r));
     }
 
     //sumar costo carga ponderado
@@ -182,7 +179,7 @@ void solucion::calcularCostoSolucion()
     costo_solucion += (costo_movmaquina * peso_maquina);
 }
 
-long solucion::getCostoSolucion()
+long long solucion::getCostoSolucion()
 {
 	return costo_solucion;
 }
@@ -195,6 +192,7 @@ vector<int> solucion::getAsignacion()
 void solucion::setBalanceTriple(vector<vector<int>>* bals)
 {
     balances = bals;
+    balances_num = bals->size();
 }
 
 void solucion::setPesoMoverMaquina(int peso)
@@ -827,6 +825,7 @@ bool solucion::move()
 					uso_procesos.at(m).at(r) > maquinas->at(m).getEspacioMax(r))
 				{
 					cout << "USO DE PROCESOS MENOR A CERO O SOBREPASO DE ESPACIO EN MAQUINA" << endl;
+					raise(SIGINT);
 					return false;
 				}
 
@@ -1130,6 +1129,17 @@ bool solucion::swap()
 			//agregar recursos en las máquinas destino (swap)
 			uso_procesos.at(maq_izq).at(r)	+= rec_der.at(r);
 			uso_procesos.at(maq_der).at(r)	+= rec_izq.at(r);
+
+			//insanity check
+			if (uso_procesos.at(maq_izq).at(r) < 0 ||
+				uso_procesos.at(maq_der).at(r) > maquinas->at(maq_der).getEspacioMax(r) ||
+				uso_procesos.at(maq_der).at(r) < 0 ||
+				uso_procesos.at(maq_izq).at(r) > maquinas->at(maq_izq).getEspacioMax(r))
+			{
+				cout << "USO DE PROCESOS MENOR A CERO O SOBREPASO DE ESPACIO EN MAQUINA" << endl;
+				raise(SIGINT);
+				return false;
+			}
 
 			//manejo de recursos transitivos
 			if (recursos_trans->at(r))

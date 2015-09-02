@@ -7,6 +7,7 @@
 
 #include <random>
 #include <cmath>
+#include <csignal>
 
 #include "proceso.h"
 #include "maquina.h"
@@ -53,7 +54,7 @@ public:
     void setTamBusqueda(int tam);
 
     //getters
-    long getCostoSolucion();
+    long long getCostoSolucion();
     vector<int> getAsignacion();
 
     //fillers
@@ -115,7 +116,7 @@ private:
     vector<int> spread_servicios;         		//cantidad de localizaciones con procesos del servicio
 
     //Fitness
-    long costo_solucion;
+    long long costo_solucion;
 
     //Sol_inicial, si es que la hay
     const solucion* sol_inicial;
